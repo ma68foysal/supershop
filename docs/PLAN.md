@@ -6,6 +6,7 @@ for each day that compares against previous days.
 
 Stack: **Next.js (App Router) + Supabase (Postgres, Auth, Storage, pg_cron) + Vercel.**
 Currency assumed **BDT (৳)**, timezone **Asia/Dhaka** — both are settings.
+**No payment handling:** every sale is cash in hand; the app only records what was sold and for how much.
 
 ---
 
@@ -14,17 +15,17 @@ Currency assumed **BDT (৳)**, timezone **Asia/Dhaka** — both are settings.
 | Need (from the brief) | How the app handles it |
 |---|---|
 | Anyone can run it, also from a phone | Mobile-first PWA (installable to home screen), big tap targets, 4 bottom tabs. Staff sign in with a 4-digit PIN; owner with email. |
-| Record a sale by **total only** ("sold ৳100") | **Quick sale** tab: number pad → payment method → Save. One record, no items. |
+| Record a sale by **total only** ("sold ৳100") | **Quick sale** tab: number pad → optional note → Save. One record, no items. |
 | Record a sale **item by item** like a super shop | **Item sale**: search or tap favourite products, adjust qty (supports 0.5 kg, 250 g), discount, Charge. Stock goes down automatically. |
 | Products added manually (no scanner) | Products screen: name (English + optional Bangla), category, unit (pcs/kg/g/L/pack), sell price, cost price, stock, short code (e.g. `soap1`) for fast search. |
 | Opening / closing times | Settings: scheduled open & close time + auto on/off. Manual **Open shop / Close shop** button always available and overrides the schedule. |
 | At closing, all-day sales as a PDF | Closing a day freezes its totals, generates the PDF, stores it in Supabase Storage. |
 | See / download / share old PDFs | Reports tab: list of every day with total and change vs previous day; View, Download, Share (Web Share API → WhatsApp, Messenger, email). |
-| Compare with previous day and tell the result | PDF + Reports show: vs previous day, vs same weekday last week, 7-day average; top items; payment split; "up 12% on yesterday" sentence. |
+| Compare with previous day and tell the result | PDF + Reports show: vs previous day, vs same weekday last week, 7-day average; top items; "up 12% on yesterday" sentence. |
 
 ### Other super-shop features worth having (phased)
-- **Phase 1 (launch):** products, both sale modes, open/close, daily PDF, reports list, receipt share, void a sale (with reason), payment methods (Cash, bKash, Nagad, Card).
-- **Phase 2:** stock-in (purchases from suppliers), low-stock list, profit per day (uses cost price), **due/baki khata** (customer credit ledger — very common in local groceries), expenses (rent, bills) so the PDF shows net.
+- **Phase 1 (launch):** products, both sale modes, open/close, daily PDF, reports list, receipt share, void a sale (with reason).
+- **Phase 2:** stock-in (purchases from suppliers), low-stock list, profit per day (uses cost price), expenses (rent, bills) so the PDF shows net.
 - **Phase 3:** offline mode (queue sales in IndexedDB, sync later), Bluetooth thermal receipt printer, monthly report, multiple staff permissions.
 
 ---
@@ -53,7 +54,7 @@ Rules
 
 ## 3. Database (Supabase / Postgres)
 
-Full SQL is in [`supabase-schema.sql`](./supabase-schema.sql). Tables:
+Full SQL is in [`supabase/schema.sql`](../supabase/schema.sql). Tables:
 
 | Table | Purpose |
 |---|---|
@@ -62,7 +63,7 @@ Full SQL is in [`supabase-schema.sql`](./supabase-schema.sql). Tables:
 | `categories` | Oil, Soap, Rice, Snacks… |
 | `products` | name, name_bn, short_code, unit, sell_price, cost_price, stock_qty, low_stock_at, is_favorite, active |
 | `business_days` | date, opened_at/by, closed_at/by, close_type (manual/auto), opening_cash, counted_cash, status, summary jsonb, pdf_path |
-| `sales` | business_day_id, receipt_no, kind (`quick`/`items`), subtotal, discount, total, payment_method, note, voided |
+| `sales` | business_day_id, receipt_no, kind (`quick`/`items`), subtotal, discount, total, note, voided |
 | `sale_items` | sale_id, product_id, **name & price snapshot**, qty, unit, line_total |
 
 Money is `numeric(12,2)`; quantity is `numeric(10,3)` so 0.250 kg works.
@@ -70,7 +71,7 @@ Money is `numeric(12,2)`; quantity is `numeric(10,3)` so 0.250 kg works.
 Database functions (called via `supabase.rpc`) keep things atomic:
 - `open_day()` / `close_day(counted_cash)` — enforce one open day, freeze summary.
 - `create_sale(payload jsonb)` — inserts sale + items + decrements stock in one transaction, assigns next receipt number for the day.
-- `day_summary(day_id)` — totals, count, by payment, by category, top 10 items, comparisons.
+- `day_summary(day_id)` — totals, count, quick vs itemised, top 10 items, comparisons.
 
 Security: Row Level Security on every table; only signed-in staff can read/write;
 only `owner` can edit products, settings, or void sales.
@@ -122,16 +123,16 @@ Supabase Storage URL that expires after 7 days).
 
 1. Header: shop name, address, date, opened 8:02 AM by Rahim, closed 10:05 PM (auto).
 2. Result box: **Total ৳18,420 — up 12% on Sunday (৳16,450)**, vs last Monday, vs 7-day average.
-3. Summary: number of sales, average sale, items sold, discounts, voids, cash / bKash / Nagad / card split, counted cash vs expected.
+3. Summary: number of sales, average sale, items sold, discounts, voids, counted cash vs expected (optional).
 4. Top 10 items by amount.
-5. Full sales list: time, receipt no, items (or "Quick sale"), payment, amount.
+5. Full sales list: time, receipt no, items (or "Quick sale"), amount.
 6. Footer: generated time, page x of y.
 
 ---
 
 ## 6. Build order
 
-1. Supabase project → run `supabase-schema.sql` → create owner user.
+1. Supabase project → run `supabase/schema.sql` → create owner user (see [SETUP.md](./SETUP.md)).
 2. Next.js: Supabase helpers, login, protected `(shop)` layout.
 3. Products CRUD (needed before item sales).
 4. Open / close day + status strip.
@@ -143,7 +144,7 @@ Supabase Storage URL that expires after 7 days).
 
 ## 7. Environment variables (Vercel + `.env.local`)
 ```
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=      # server only — PDF route & cron
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...      # server only — never commit
 ```

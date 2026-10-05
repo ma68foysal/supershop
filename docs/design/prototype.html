@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dokan prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wdth,wght@75..125,300..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --khata:#9E1B22; --khata-deep:#7A1219;
+  --paper:#F2F5F0; --sheet:#FFFFFF;
+  --rule:#C3D5E4; --margin:#E07070;
+  --ink:#1B2B4B; --ink-2:#4B5A75; --ink-3:#7D899E;
+  --leaf:#2F7A4A; --marigold:#D9960F;
+  --r-key:12px; --r-btn:10px;
+  --font:"Anek Bangla", system-ui, sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:#DCE3DA;color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+:focus-visible{outline:3px solid var(--marigold);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums;font-stretch:78%;font-weight:700}
+.bn{font-size:.82em;color:var(--ink-3)}
+
+/* ---------- stage ---------- */
+.stage{display:flex;gap:40px;justify-content:center;align-items:flex-start;padding:24px}
+.app{position:relative;width:420px;height:min(880px,calc(100dvh - 48px));background:var(--paper);display:flex;flex-direction:column;overflow:hidden;border-radius:22px;box-shadow:0 0 0 1px #b9c4b6, 0 30px 60px -30px rgba(27,43,75,.45)}
+@media (max-width:999px){
+  body{background:var(--paper)}
+  .stage{padding:0}
+  .app{width:100%;height:100dvh;border-radius:0;box-shadow:none}
+  .pdf-wrap{display:none}
+}
+
+/* ---------- status strip (red cloth) ---------- */
+.status{position:relative;padding:14px 16px 16px;color:#FBEDEA;background:
+  repeating-linear-gradient(45deg,rgba(255,255,255,.04) 0 2px,transparent 2px 4px),
+  repeating-linear-gradient(-45deg,rgba(0,0,0,.06) 0 2px,transparent 2px 4px),var(--khata)}
+.status.closed{background:var(--ink);color:#DDE5F0}
+.status-top{display:flex;align-items:center;justify-content:space-between}
+.shop-name{font-weight:700;font-stretch:110%;font-size:20px;letter-spacing:.01em}
+.icon-btn{width:40px;height:40px;display:grid;place-items:center;border-radius:50%;color:inherit}
+.icon-btn:hover{background:rgba(255,255,255,.12)}
+.status-line{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px}
+.status-text{font-size:14px;opacity:.92}
+.status-text b{font-weight:600}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#7EE2A0;margin-right:6px;vertical-align:1px}
+.closed .dot{background:#9AA7BD}
+.pill{padding:7px 14px;border-radius:999px;font-weight:600;font-size:14px;background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.35)}
+.pill:hover{background:rgba(255,255,255,.22)}
+.closed .pill{background:var(--leaf);border-color:var(--leaf)}
+
+/* ---------- screens ---------- */
+.screens{flex:1;overflow:hidden;position:relative}
+.screen{position:absolute;inset:0;overflow-y:auto;padding:16px 16px 24px;display:none}
+.screen.active{display:block}
+.screen.with-cart{padding-bottom:96px}
+h2{font-size:22px;font-weight:700;font-stretch:90%;line-height:1.2}
+.sub{color:var(--ink-2);font-size:14px}
+
+/* segmented */
+.seg{display:grid;grid-template-columns:1fr 1fr;background:#E3E9E2;border-radius:var(--r-btn);padding:4px;margin-bottom:14px}
+.seg button{padding:10px;border-radius:8px;font-weight:600;color:var(--ink-2)}
+.seg button[aria-pressed=true]{background:var(--sheet);color:var(--ink);box-shadow:0 1px 2px rgba(27,43,75,.18)}
+
+/* ---------- the ledger (signature element) ---------- */
+.ledger{position:relative;background:
+  linear-gradient(90deg,transparent 38px,var(--margin) 38px 39px,transparent 39px 42px,var(--margin) 42px 43px,transparent 43px),
+  repeating-linear-gradient(180deg,transparent 0 31px,var(--rule) 31px 32px),#FAFCF9;
+  border:1px solid var(--rule);border-radius:4px;padding:12px 16px 14px 58px;min-height:128px}
+.ledger-label{font-size:14px;color:var(--ink-2);line-height:32px;height:32px;margin-top:-12px;padding-top:0}
+.ledger-amount{font-size:72px;line-height:64px;font-variant-numeric:tabular-nums;font-stretch:75%;font-weight:700;letter-spacing:-.01em;display:flex;align-items:baseline;gap:6px;min-height:64px;overflow:hidden;white-space:nowrap}
+.ledger-amount .tk{font-size:40px;font-weight:600;color:var(--ink-2)}
+.ledger-amount.empty{color:#AEB9C9}
+.caret{display:inline-block;width:3px;height:52px;background:var(--khata);align-self:center;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.caret{animation:none}}
+
+/* keypad */
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.key{height:60px;background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r-key);font-size:30px;font-stretch:80%;font-weight:600;font-variant-numeric:tabular-nums;transition:transform .06s}
+.key:active{transform:scale(.96);background:#EAF0F6}
+.key.fn{font-size:22px;color:var(--ink-2)}
+
+.label{font-size:14px;color:var(--ink-2);margin:16px 0 8px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:9px 16px;border-radius:999px;border:1px solid var(--rule);background:var(--sheet);font-weight:500;font-size:15px}
+.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#fff}
+.note{width:100%;margin-top:12px;padding:12px 14px;border:1px solid var(--rule);border-radius:var(--r-btn);background:var(--sheet)}
+.primary{width:100%;margin-top:16px;padding:16px;border-radius:var(--r-btn);background:var(--khata);color:#fff;font-size:18px;font-weight:600;display:flex;justify-content:center;gap:8px}
+.primary:hover{background:var(--khata-deep)}
+.primary:disabled{background:#C9CFD8;color:#fff;cursor:not-allowed}
+.secondary{width:100%;padding:14px;border-radius:var(--r-btn);border:1px solid var(--ink);font-weight:600;background:transparent}
+
+/* product list (items mode) */
+.search{width:100%;padding:13px 14px 13px 42px;border:1px solid var(--rule);border-radius:var(--r-btn);background:var(--sheet) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%237D899E' stroke-width='2'%3E%3Ccircle cx='8' cy='8' r='6'/%3E%3Cpath d='m13 13 4 4'/%3E%3C/svg%3E") no-repeat 14px center}
+.cats{display:flex;gap:8px;overflow-x:auto;margin:12px -16px 4px;padding:0 16px 4px;scrollbar-width:none}
+.cats .chip{white-space:nowrap;padding:7px 14px;font-size:14px}
+.rows{list-style:none;padding:0;border-top:1px solid var(--rule)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid var(--rule)}
+.row-main{flex:1;min-width:0}
+.row-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-meta{font-size:13px;color:var(--ink-3)}
+.row-price{text-align:right;font-size:18px}
+.row-price small{display:block;font-size:12px;font-weight:400;color:var(--ink-3);font-stretch:100%}
+.add{position:relative;width:44px;height:44px;border-radius:50%;border:1.5px solid var(--khata);color:var(--khata);display:grid;place-items:center;flex:none}
+.add.in{background:var(--khata);color:#fff}
+.add .count{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--ink);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center}
+
+.cartbar{position:absolute;left:12px;right:12px;bottom:76px;display:none;align-items:center;gap:12px;padding:10px 10px 10px 16px;background:var(--ink);color:#fff;border-radius:14px;box-shadow:0 12px 24px -12px rgba(27,43,75,.6)}
+.cartbar.show{display:flex}
+.cartbar .info{flex:1;line-height:1.2}
+.cartbar .info small{display:block;color:#AFC0DA;font-size:13px}
+.cartbar .info .num{font-size:24px}
+.cartbar button{background:var(--khata);color:#fff;padding:12px 16px;border-radius:var(--r-btn);font-weight:600}
+
+/* ---------- today ---------- */
+.today-ledger .ledger-amount{font-size:64px}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);margin:14px 0 4px;border:1px solid var(--rule);border-radius:4px;background:var(--sheet)}
+.fact{padding:10px 12px;border-left:1px solid var(--rule)}
+.fact:first-child{border-left:0}
+.fact .num{font-size:24px;display:block;line-height:1.1}
+.fact span:last-child{font-size:13px;color:var(--ink-2)}
+.compare{margin-top:12px;font-size:15px}
+.up{color:var(--leaf);font-weight:600}
+.down{color:var(--khata);font-weight:600}
+.section-head{display:flex;justify-content:space-between;align-items:baseline;margin:24px 0 6px}
+.section-head h3{font-size:17px;font-weight:600}
+.sale-row .row-meta b{font-weight:600;color:var(--ink-2)}
+.tag{display:inline-block;font-size:12px;padding:1px 7px;border-radius:4px;background:#E6ECF3;color:var(--ink-2);margin-left:4px}
+
+/* ---------- reports ---------- */
+.bars{display:flex;align-items:flex-end;gap:6px;height:120px;padding:10px 4px 0;border-bottom:1px solid var(--ink-3);margin:12px 0 4px}
+.bar{flex:1;background:#B9C9DC;border-radius:3px 3px 0 0;position:relative}
+.bar.today{background:var(--khata)}
+.bar-labels{display:flex;gap:6px;padding:0 4px;font-size:12px;color:var(--ink-3)}
+.bar-labels span{flex:1;text-align:center}
+.day-row{align-items:flex-start}
+.day-actions{display:flex;gap:6px;margin-top:8px}
+.mini{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:1px solid var(--rule);background:var(--sheet);font-size:14px;font-weight:500}
+.mini:hover{border-color:var(--ink-3)}
+
+/* ---------- products ---------- */
+.toolbar{display:flex;gap:8px;align-items:center}
+.toolbar .search{flex:1}
+.btn-add{padding:12px 16px;border-radius:var(--r-btn);background:var(--khata);color:#fff;font-weight:600;white-space:nowrap}
+.low{color:var(--marigold);font-weight:600}
+
+/* ---------- tabs ---------- */
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);background:var(--sheet);border-top:1px solid var(--rule);padding-bottom:env(safe-area-inset-bottom)}
+.tab{position:relative;padding:9px 0 10px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:13px;color:var(--ink-3);font-weight:500}
+.tab svg{width:24px;height:24px}
+.tab[aria-current=page]{color:var(--ink)}
+.tab[aria-current=page]::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:3px;background:var(--khata);border-radius:0 0 3px 3px}
+
+/* ---------- sheet + toast ---------- */
+.scrim{position:absolute;inset:0;background:rgba(27,43,75,.42);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:88%;overflow-y:auto;background:var(--paper);border-radius:18px 18px 0 0;padding:10px 16px 20px;transform:translateY(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);z-index:21}
+.sheet.show{transform:none}
+.grab{width:40px;height:4px;border-radius:2px;background:#C2CBD6;margin:0 auto 12px}
+.sheet h2{margin-bottom:4px}
+.stepper{display:flex;align-items:center;border:1px solid var(--rule);border-radius:8px;background:var(--sheet)}
+.stepper button{width:36px;height:36px;font-size:20px;color:var(--ink-2)}
+.stepper span{min-width:44px;text-align:center;font-size:17px}
+.totals{margin-top:14px;border-top:1px dashed var(--ink-3);padding-top:10px}
+.totals div{display:flex;justify-content:space-between;padding:3px 0}
+.totals .grand{font-size:24px;padding-top:6px}
+.field{display:block;margin-top:12px}
+.field span{display:block;font-size:14px;color:var(--ink-2);margin-bottom:4px}
+.field input,.field select{width:100%;padding:12px 14px;border:1px solid var(--rule);border-radius:var(--r-btn);background:var(--sheet)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.switch{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--rule)}
+.switch input{width:46px;height:26px;accent-color:var(--leaf)}
+.toast{position:absolute;left:50%;bottom:84px;transform:translate(-50%,20px);opacity:0;background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-weight:500;font-size:15px;transition:all .2s;z-index:30;white-space:nowrap;pointer-events:none}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- PDF preview (desktop) ---------- */
+.pdf-wrap{width:560px;flex:none}
+.pdf-cap{font-size:14px;color:var(--ink-2);margin:4px 0 10px}
+.a4{background:#fff;aspect-ratio:1/1.414;padding:40px 44px;box-shadow:0 0 0 1px #c6cfc4,0 24px 50px -28px rgba(27,43,75,.5);font-size:12px;line-height:1.4;overflow:hidden;position:relative}
+.a4::before{content:"";position:absolute;left:0;right:0;top:0;height:8px;background:var(--khata)}
+.a4 header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1.5px solid var(--ink);padding-bottom:10px}
+.a4 .shop{font-size:20px;font-weight:700;font-stretch:110%}
+.a4 .doc{text-align:right;color:var(--ink-2)}
+.a4 .doc b{display:block;color:var(--ink);font-size:14px}
+.result{display:flex;align-items:center;gap:20px;margin:16px 0;padding:12px 16px;border:1px solid var(--rule);border-left:4px solid var(--khata);background:#FAFCF9}
+.result .num{font-size:38px;line-height:1}
+.result p{font-size:13px}
+.a4 h4{font-size:12px;font-weight:700;margin:14px 0 4px;color:var(--ink)}
+.a4 table{width:100%;border-collapse:collapse}
+.a4 td,.a4 th{padding:3px 4px;border-bottom:1px solid #E1E8EF;text-align:left;font-weight:400}
+.a4 th{color:var(--ink-3);font-size:11px}
+.a4 td.r,.a4 th.r{text-align:right;font-variant-numeric:tabular-nums}
+.a4 .cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.a4 footer{position:absolute;bottom:20px;left:44px;right:44px;display:flex;justify-content:space-between;color:var(--ink-3);font-size:10px}
+</style>
+</head>
+<body>
+<div class="stage">
+
+<main class="app" id="app">
+  <header class="status" id="status">
+    <div class="status-top">
+      <div class="shop-name">Nur Store</div>
+      <button class="icon-btn" aria-label="Shop hours and settings" data-open="hours">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
+    <div class="status-line">
+      <div class="status-text" id="statusText"></div>
+      <button class="pill" id="statusBtn"></button>
+    </div>
+  </header>
+
+  <div class="screens">
+    <!-- SELL -->
+    <section class="screen active" id="sell" aria-label="Sell">
+      <div class="seg" role="group" aria-label="How to record this sale">
+        <button aria-pressed="true" data-mode="quick">Total only</button>
+        <button aria-pressed="false" data-mode="items">Item by item</button>
+      </div>
+
+      <div id="quick">
+        <div class="ledger">
+          <div class="ledger-label">Amount received</div>
+          <div class="ledger-amount" id="qAmount"></div>
+        </div>
+        <div class="keypad" id="keypad"></div>
+        <input class="note" id="qNote" placeholder="Note (optional), e.g. oil, shampoo, soap">
+        <button class="primary" id="qSave" disabled>Save sale</button>
+      </div>
+
+      <div id="items" hidden>
+        <input class="search" id="pSearch" type="search" placeholder="Search name, বাংলা or code" aria-label="Search products">
+        <div class="cats" id="cats"></div>
+        <ul class="rows" id="pList"></ul>
+      </div>
+    </section>
+
+    <!-- TODAY -->
+    <section class="screen" id="today" aria-label="Today">
+      <div class="ledger today-ledger">
+        <div class="ledger-label" id="tLabel">Sold today</div>
+        <div class="ledger-amount" id="tTotal"></div>
+      </div>
+      <div class="facts" id="tFacts"></div>
+      <p class="compare" id="tCompare"></p>
+      <div class="section-head"><h3>Sales</h3><span class="sub" id="tCount"></span></div>
+      <ul class="rows" id="tList"></ul>
+    </section>
+
+    <!-- REPORTS -->
+    <section class="screen" id="reports" aria-label="Reports">
+      <h2>Daily reports</h2>
+      <p class="sub">A PDF is made each time the shop closes.</p>
+      <div class="bars" id="bars" aria-hidden="true"></div>
+      <div class="bar-labels" id="barLabels" aria-hidden="true"></div>
+      <ul class="rows" id="rList" style="margin-top:18px"></ul>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section class="screen" id="products" aria-label="Products">
+      <div class="toolbar">
+        <input class="search" id="prSearch" type="search" placeholder="Search products" aria-label="Search products">
+        <button class="btn-add" data-open="product">Add product</button>
+      </div>
+      <p class="sub" style="margin:12px 0 6px" id="prCount"></p>
+      <ul class="rows" id="prList"></ul>
+    </section>
+  </div>
+
+  <div class="cartbar" id="cartbar">
+    <div class="info"><small id="cbCount"></small><span class="num" id="cbTotal"></span></div>
+    <button data-open="cart">Review and charge</button>
+  </div>
+
+  <nav class="tabs" aria-label="Main">
+    <button class="tab" data-tab="sell" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16l-1.5 9h-13z"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/><path d="M4 6 3 3H1"/></svg>Sell</button>
+    <button class="tab" data-tab="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 3v18M11 8h6M11 12h6M11 16h4"/></svg>Today</button>
+    <button class="tab" data-tab="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 17v-3M12 17v-6M15 17v-4"/></svg>Reports</button>
+    <button class="tab" data-tab="products"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 2 9 5v10l-9 5-9-5V7z"/><path d="m3 7 9 5 9-5M12 12v10"/></svg>Products</button>
+  </nav>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+  <div class="toast" id="toast" role="status"></div>
+</main>
+
+<aside class="pdf-wrap" aria-label="Daily report PDF preview">
+  <p class="pdf-cap">Daily report PDF, updates as you record sales in the app</p>
+  <div class="a4" id="a4"></div>
+</aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const tk = n => '৳' + Number(n).toLocaleString('en-IN', {maximumFractionDigits: 2});
+
+const products = [
+  {id:1,name:'Soybean oil 1 L',bn:'সয়াবিন তেল',cat:'Oil',unit:'pcs',price:175,stock:24,fav:1,code:'oil1'},
+  {id:2,name:'Soybean oil 5 L',bn:'সয়াবিন তেল ৫ লি.',cat:'Oil',unit:'pcs',price:850,stock:6,fav:0,code:'oil5'},
+  {id:3,name:'Miniket rice',bn:'মিনিকেট চাল',cat:'Rice & dal',unit:'kg',price:72,stock:140,fav:1,code:'rice'},
+  {id:4,name:'Masur dal',bn:'মসুর ডাল',cat:'Rice & dal',unit:'kg',price:135,stock:38,fav:1,code:'dal'},
+  {id:5,name:'Sugar',bn:'চিনি',cat:'Rice & dal',unit:'kg',price:130,stock:4,low:5,fav:0,code:'sugar'},
+  {id:6,name:'Bath soap 100 g',bn:'সাবান',cat:'Toiletries',unit:'pcs',price:55,stock:60,fav:1,code:'soap'},
+  {id:7,name:'Shampoo 180 ml',bn:'শ্যাম্পু',cat:'Toiletries',unit:'pcs',price:340,stock:9,fav:0,code:'sh180'},
+  {id:8,name:'Shampoo sachet',bn:'শ্যাম্পু মিনি প্যাক',cat:'Toiletries',unit:'pcs',price:5,stock:200,fav:1,code:'sh'},
+  {id:9,name:'Eggs',bn:'ডিম',cat:'Daily',unit:'dozen',price:150,stock:3,low:4,fav:1,code:'egg'},
+  {id:10,name:'Onion',bn:'পেঁয়াজ',cat:'Vegetables',unit:'kg',price:80,stock:45,fav:0,code:'onion'},
+  {id:11,name:'Potato',bn:'আলু',cat:'Vegetables',unit:'kg',price:50,stock:70,fav:0,code:'potato'},
+  {id:12,name:'Salt 1 kg',bn:'লবণ',cat:'Daily',unit:'pcs',price:42,stock:30,fav:0,code:'salt'},
+  {id:13,name:'Tea leaves 400 g',bn:'চা পাতা',cat:'Daily',unit:'pcs',price:260,stock:12,fav:0,code:'tea'},
+  {id:14,name:'Biscuits',bn:'বিস্কুট',cat:'Snacks',unit:'pcs',price:20,stock:80,fav:1,code:'bis'},
+  {id:15,name:'Milk powder 500 g',bn:'গুঁড়া দুধ',cat:'Daily',unit:'pcs',price:420,stock:2,low:3,fav:0,code:'milk'},
+  {id:16,name:'Detergent 500 g',bn:'ডিটারজেন্ট',cat:'Toiletries',unit:'pcs',price:120,stock:22,fav:0,code:'det'},
+];
+const byId = id => products.find(p => p.id === id);
+
+const state = {
+  open:true, openedAt:'8:02 AM', openedBy:'Rahim', openTime:'08:00', closeTime:'22:00', autoOpen:false, autoClose:true,
+  tab:'sell', mode:'quick', amount:'', cart:{}, cat:'Favourites', q:'', prq:'',
+  sales:[
+    {no:1,time:'8:15 AM',kind:'quick',total:100,note:'Oil, shampoo, soap'},
+    {no:2,time:'8:41 AM',kind:'items',items:[[3,5],[4,1],[1,1]]},
+    {no:3,time:'9:20 AM',kind:'items',items:[[9,1],[14,3]]},
+    {no:4,time:'10:05 AM',kind:'quick',total:460},
+    {no:5,time:'11:32 AM',kind:'items',items:[[2,1],[5,2],[12,1]]},
+    {no:6,time:'12:48 PM',kind:'items',items:[[6,4],[8,10],[16,1]]},
+    {no:7,time:'2:10 PM',kind:'quick',total:1250},
+    {no:8,time:'4:36 PM',kind:'items',items:[[13,1],[15,1],[14,2]]},
+    {no:9,time:'5:55 PM',kind:'quick',total:320},
+  ],
+  // previous closed days, newest first
+  days:[
+    {date:'Sun 4 Oct',total:16450,sales:58},{date:'Sat 3 Oct',total:17120,sales:61},{date:'Fri 2 Oct',total:21980,sales:74},
+    {date:'Thu 1 Oct',total:15870,sales:55},{date:'Wed 30 Sep',total:14230,sales:49},{date:'Tue 29 Sep',total:15010,sales:52},
+    {date:'Mon 28 Sep',total:15400,sales:53},{date:'Sun 27 Sep',total:14980,sales:50},
+  ],
+};
+const saleTotal = s => s.kind === 'quick' ? s.total : s.items.reduce((a,[id,q]) => a + byId(id).price*q, 0);
+const saleDesc = s => s.kind === 'quick' ? (s.note || 'Quick sale') :
+  s.items.slice(0,2).map(([id]) => byId(id).name).join(', ') + (s.items.length > 2 ? ` +${s.items.length-2} more` : '');
+const todayTotal = () => state.sales.reduce((a,s) => a + saleTotal(s), 0);
+const qtyLabel = (p,q) => p.unit === 'kg' ? `${q} kg` : p.unit === 'dozen' ? `${q} dz` : `${q}`;
+const nowTime = () => new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+const fmt12 = t => { const [h,m] = t.split(':').map(Number); return `${(h%12)||12}:${String(m).padStart(2,'0')} ${h<12?'AM':'PM'}`; };
+
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ----- status ----- */
+function renderStatus(){
+  $('#status').classList.toggle('closed', !state.open);
+  $('#statusText').innerHTML = state.open
+    ? `<span class="dot"></span><b>Open</b> since ${state.openedAt}<br>${state.autoClose ? 'Closes automatically at ' + fmt12(state.closeTime) : 'Close manually when done'}`
+    : `<span class="dot"></span><b>Closed</b><br>${state.autoOpen ? 'Opens automatically at ' + fmt12(state.openTime) : 'Open the shop to start selling'}`;
+  $('#statusBtn').textContent = state.open ? 'Close shop' : 'Open shop';
+}
+$('#statusBtn').onclick = () => state.open ? openSheet('close') : (state.open = true, state.openedAt = nowTime(), state.sales = [], renderAll(), toast('Shop opened'));
+
+/* ----- tabs ----- */
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => { state.tab = b.dataset.tab; renderToday(); renderReports(); renderTabs(); });
+function renderTabs(){
+  document.querySelectorAll('.tab').forEach(b => b.dataset.tab === state.tab ? b.setAttribute('aria-current','page') : b.removeAttribute('aria-current'));
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === state.tab));
+  renderCartbar();
+}
+
+/* ----- sell: mode ----- */
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
+  state.mode = b.dataset.mode;
+  document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b));
+  $('#quick').hidden = state.mode !== 'quick'; $('#items').hidden = state.mode !== 'items';
+  renderCartbar();
+});
+
+/* ----- quick sale ----- */
+['1','2','3','4','5','6','7','8','9','00','0','del'].forEach(k => {
+  const b = document.createElement('button');
+  b.className = 'key' + (k === 'del' ? ' fn' : '');
+  b.innerHTML = k === 'del' ? '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 5H9l-6 7 6 7h12z"/><path d="m17 9-6 6M11 9l6 6"/></svg>' : k;
+  b.setAttribute('aria-label', k === 'del' ? 'Delete digit' : k);
+  b.onclick = () => {
+    if (k === 'del') state.amount = state.amount.slice(0,-1);
+    else if (state.amount.length < 7 && !(state.amount === '' && k.startsWith('0'))) state.amount += k;
+    renderQuick();
+  };
+  $('#keypad').append(b);
+});
+function renderQuick(){
+  const a = state.amount;
+  const el = $('#qAmount');
+  el.classList.toggle('empty', !a);
+  el.innerHTML = `<span class="tk">৳</span><span>${a ? Number(a).toLocaleString('en-IN') : '0'}</span><span class="caret"></span>`;
+  $('#qSave').disabled = !a;
+  $('#qSave').textContent = a ? `Save sale of ${tk(a)}` : 'Save sale';
+}
+$('#qSave').onclick = () => {
+  if (!state.open) return toast('Shop is closed. Open the shop to start selling');
+  state.sales.push({no:state.sales.length+1,time:nowTime(),kind:'quick',total:Number(state.amount),note:$('#qNote').value.trim()});
+  toast(`Sale saved, ${tk(state.amount)}`);
+  state.amount=''; $('#qNote').value=''; renderQuick(); renderToday(); renderPDF();
+};
+
+/* ----- item sale ----- */
+function renderCats(){
+  const cats = ['Favourites','All',...new Set(products.map(p=>p.cat))];
+  $('#cats').innerHTML = cats.map(c => `<button class="chip" aria-pressed="${state.cat===c}">${c}</button>`).join('');
+  $('#cats').querySelectorAll('.chip').forEach(c => c.onclick = () => { state.cat = c.textContent; renderCats(); renderPList(); });
+}
+function renderPList(){
+  const q = state.q.toLowerCase();
+  const list = products.filter(p => q ? (p.name+p.bn+p.code).toLowerCase().includes(q) : state.cat==='All' || (state.cat==='Favourites' ? p.fav : p.cat===state.cat));
+  $('#pList').innerHTML = list.map(p => {
+    const n = state.cart[p.id];
+    return `<li class="row">
+      <div class="row-main"><div class="row-name">${p.name}</div><div class="row-meta">${p.bn}</div></div>
+      <div class="row-price num">${tk(p.price)}<small>per ${p.unit === 'pcs' ? 'piece' : p.unit}</small></div>
+      <button class="add ${n?'in':''}" data-id="${p.id}" aria-label="Add ${p.name}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        ${n ? `<span class="count">${n}</span>` : ''}
+      </button></li>`;
+  }).join('') || `<li class="row"><div class="row-main"><div class="row-name">No product matches “${state.q}”</div><div class="row-meta">Check the spelling, or add it in Products.</div></div></li>`;
+  $('#pList').querySelectorAll('.add').forEach(b => b.onclick = () => { const id=+b.dataset.id; state.cart[id]=(state.cart[id]||0)+1; renderPList(); renderCartbar(); });
+}
+$('#pSearch').oninput = e => { state.q = e.target.value; renderPList(); };
+const cartItems = () => Object.entries(state.cart).map(([id,q]) => [byId(+id), q]);
+const cartTotal = () => cartItems().reduce((a,[p,q]) => a + p.price*q, 0);
+function renderCartbar(){
+  const items = cartItems();
+  const show = state.tab==='sell' && state.mode==='items' && items.length;
+  $('#cartbar').classList.toggle('show', !!show);
+  $('#sell').classList.toggle('with-cart', !!show);
+  if (!show) return;
+  $('#cbCount').textContent = `${items.length} item${items.length>1?'s':''} in cart`;
+  $('#cbTotal').textContent = tk(cartTotal());
+}
+
+/* ----- today ----- */
+function renderToday(){
+  const total = todayTotal(), prev = state.days[0];
+  $('#tLabel').textContent = state.open ? 'Sold today so far' : 'Sold today, final';
+  $('#tTotal').innerHTML = `<span class="tk">৳</span><span>${total.toLocaleString('en-IN')}</span>`;
+  const n = state.sales.length;
+  $('#tFacts').innerHTML = `
+    <div class="fact"><span class="num">${n}</span><span>sales</span></div>
+    <div class="fact"><span class="num">${tk(n?Math.round(total/n):0)}</span><span>average sale</span></div>
+    <div class="fact"><span class="num">${state.sales.filter(s=>s.kind==='items').reduce((a,s)=>a+s.items.length,0)}</span><span>items listed</span></div>`;
+  $('#tCompare').innerHTML = `Yesterday closed at <b>${tk(prev.total)}</b>. ${total >= prev.total
+    ? `<span class="up">You're ${tk(total-prev.total)} ahead.</span>` : `${tk(prev.total-total)} to go to match it.`}`;
+  $('#tCount').textContent = n ? `Newest first` : '';
+  $('#tList').innerHTML = [...state.sales].reverse().map(s => `<li class="row sale-row">
+    <div class="row-main"><div class="row-name">${saleDesc(s)}${s.kind==='quick'?'<span class="tag">Total only</span>':''}</div>
+    <div class="row-meta"><b>#${s.no}</b> ${s.time}</div></div>
+    <div class="row-price num">${tk(saleTotal(s))}</div></li>`).join('')
+    || `<li class="row"><div class="row-main"><div class="row-name">No sales yet today</div><div class="row-meta">Sales you record on the Sell tab show up here.</div></div></li>`;
+}
+
+/* ----- reports ----- */
+function renderReports(){
+  const week = [...state.days.slice(0,6)].reverse().concat([{date:'Today',total:todayTotal(),today:1}]);
+  const max = Math.max(...week.map(d=>d.total));
+  $('#bars').innerHTML = week.map(d => `<div class="bar ${d.today?'today':''}" style="height:${Math.max(4,d.total/max*100)}%" title="${d.date} ${tk(d.total)}"></div>`).join('');
+  $('#barLabels').innerHTML = week.map(d => `<span>${d.today?'Today':d.date.split(' ')[0]}</span>`).join('');
+  const rows = state.days.map((d,i) => {
+    const p = state.days[i+1]; const pct = p ? Math.round((d.total-p.total)/p.total*100) : null;
+    return `<li class="row day-row"><div class="row-main">
+      <div class="row-name">${d.date}</div>
+      <div class="row-meta">${d.sales} sales${pct===null?'':`, <span class="${pct>=0?'up':'down'}">${pct>=0?'▲':'▼'} ${Math.abs(pct)}% vs day before</span>`}</div>
+      <div class="day-actions">
+        <button class="mini" data-act="View">View PDF</button>
+        <button class="mini" data-act="Download">Download</button>
+        <button class="mini" data-act="Share">Share</button>
+      </div></div>
+      <div class="row-price num">${tk(d.total)}</div></li>`;
+  }).join('');
+  $('#rList').innerHTML = (state.open ? `<li class="row"><div class="row-main"><div class="row-name">Today, still open</div><div class="row-meta">The PDF is made when you close the shop.</div></div><div class="row-price num">${tk(todayTotal())}</div></li>` : '') + rows;
+  $('#rList').querySelectorAll('.mini').forEach(b => b.onclick = () => toast(b.dataset.act === 'Share' ? 'Opens your phone’s share menu (WhatsApp, email…)' : b.dataset.act === 'Download' ? 'Downloading report PDF' : 'Opening report PDF'));
+}
+
+/* ----- products ----- */
+function renderProducts(){
+  const q = state.prq.toLowerCase();
+  const list = products.filter(p => (p.name+p.bn+p.code).toLowerCase().includes(q));
+  const low = products.filter(p => p.low && p.stock <= p.low).length;
+  $('#prCount').innerHTML = `${products.length} products${low ? `, <span class="low">${low} running low</span>` : ''}`;
+  $('#prList').innerHTML = list.map(p => `<li class="row">
+    <div class="row-main"><div class="row-name">${p.name} <span class="bn">${p.bn}</span></div>
+    <div class="row-meta">${p.cat}, code ${p.code}, <span class="${p.low && p.stock<=p.low?'low':''}">${p.stock} ${p.unit==='pcs'?'in stock':p.unit+' in stock'}</span></div></div>
+    <div class="row-price num">${tk(p.price)}<small>per ${p.unit==='pcs'?'piece':p.unit}</small></div></li>`).join('');
+}
+$('#prSearch').oninput = e => { state.prq = e.target.value; renderProducts(); };
+
+/* ----- sheets ----- */
+function closeSheet(){ $('#sheet').classList.remove('show'); $('#scrim').classList.remove('show'); }
+$('#scrim').onclick = closeSheet;
+document.addEventListener('keydown', e => e.key === 'Escape' && closeSheet());
+document.addEventListener('click', e => { const t = e.target.closest('[data-open]'); if (t) openSheet(t.dataset.open); });
+
+function openSheet(kind){
+  const sh = $('#sheet');
+  if (kind === 'cart') {
+    let disc = 0;
+    const draw = () => {
+      const items = cartItems(), sub = cartTotal(), total = Math.max(0, sub - disc);
+      if (!items.length) { closeSheet(); renderPList(); renderCartbar(); return; }
+      sh.innerHTML = `<div class="grab"></div><h2>Cart</h2>
+        <ul class="rows" style="margin-top:10px">${items.map(([p,q]) => `<li class="row">
+          <div class="row-main"><div class="row-name">${p.name}</div><div class="row-meta">${tk(p.price)} per ${p.unit==='pcs'?'piece':p.unit}</div></div>
+          <div class="stepper"><button data-d="-1" data-id="${p.id}" aria-label="Less">−</button><span class="num">${qtyLabel(p,q)}</span><button data-d="1" data-id="${p.id}" aria-label="More">+</button></div>
+          <div class="row-price num" style="min-width:72px">${tk(p.price*q)}</div></li>`).join('')}</ul>
+        <label class="field"><span>Discount (৳)</span><input id="disc" inputmode="numeric" value="${disc||''}" placeholder="0"></label>
+        <div class="totals"><div><span>Subtotal</span><span class="num">${tk(sub)}</span></div>
+          ${disc?`<div><span>Discount</span><span class="num">−${tk(disc)}</span></div>`:''}
+          <div class="grand"><span>Total</span><span class="num">${tk(total)}</span></div></div>
+        <button class="primary" id="charge">Charge ${tk(total)}</button>`;
+      sh.querySelectorAll('.stepper button').forEach(b => b.onclick = () => {
+        const p = byId(+b.dataset.id), step = p.unit==='kg' ? .5 : 1;
+        state.cart[p.id] = Math.round((state.cart[p.id] + step*b.dataset.d)*10)/10;
+        if (state.cart[p.id] <= 0) delete state.cart[p.id];
+        draw(); renderPList(); renderCartbar();
+      });
+      sh.querySelector('#disc').onchange = e => { disc = Math.min(sub, Number(e.target.value)||0); draw(); };
+      sh.querySelector('#charge').onclick = () => {
+        if (!state.open) return toast('Shop is closed. Open the shop to start selling');
+        const items = cartItems().map(([p,q]) => [p.id,q]);
+        state.sales.push({no:state.sales.length+1,time:nowTime(),kind:'items',items});
+        if (disc) state.sales[state.sales.length-1] = {...state.sales.at(-1), kind:'quick', total, note:saleDesc({kind:'items',items})+' (discount '+tk(disc)+')'};
+        items.forEach(([id,q]) => byId(id).stock -= q);
+        state.cart = {}; closeSheet(); toast(`Sale saved, ${tk(total)}`);
+        renderPList(); renderCartbar(); renderToday(); renderProducts(); renderPDF();
+      };
+    };
+    draw();
+  }
+  if (kind === 'close') {
+    const total = todayTotal();
+    sh.innerHTML = `<div class="grab"></div><h2>Close the shop for today?</h2>
+      <p class="sub">${state.sales.length} sales, ${tk(total)} in total. The day's PDF report is made when you close.</p>
+      <label class="field"><span>Cash counted in the drawer (optional)</span><input inputmode="numeric" placeholder="e.g. ${Math.round(total*.7)}"></label>
+      <button class="primary" id="doClose">Close shop and make report</button>
+      <button class="secondary" style="margin-top:8px" id="keep">Keep selling</button>`;
+    sh.querySelector('#keep').onclick = closeSheet;
+    sh.querySelector('#doClose').onclick = () => {
+      state.open = false;
+      state.days.unshift({date:'Mon 5 Oct',total,sales:state.sales.length});
+      closeSheet(); renderAll(); toast('Shop closed. Today’s report is ready');
+    };
+  }
+  if (kind === 'hours') {
+    sh.innerHTML = `<div class="grab"></div><h2>Shop hours</h2>
+      <p class="sub">You can always open or close by hand. Automatic times are a backup.</p>
+      <div class="two"><label class="field"><span>Opening time</span><input type="time" id="hO" value="${state.openTime}"></label>
+      <label class="field"><span>Closing time</span><input type="time" id="hC" value="${state.closeTime}"></label></div>
+      <label class="switch"><span>Open automatically at opening time</span><input type="checkbox" id="aO" ${state.autoOpen?'checked':''}></label>
+      <label class="switch"><span>Close automatically at closing time</span><input type="checkbox" id="aC" ${state.autoClose?'checked':''}></label>
+      <button class="primary" id="saveH">Save hours</button>`;
+    sh.querySelector('#saveH').onclick = () => {
+      state.openTime = $('#hO').value; state.closeTime = $('#hC').value;
+      state.autoOpen = $('#aO').checked; state.autoClose = $('#aC').checked;
+      closeSheet(); renderStatus(); toast('Hours saved');
+    };
+  }
+  if (kind === 'product') {
+    sh.innerHTML = `<div class="grab"></div><h2>Add product</h2>
+      <label class="field"><span>Name</span><input id="nN" placeholder="e.g. Mustard oil 500 ml"></label>
+      <label class="field"><span>Name in Bangla (optional)</span><input id="nB" placeholder="সরিষার তেল"></label>
+      <div class="two"><label class="field"><span>Sell price (৳)</span><input id="nP" inputmode="decimal"></label>
+      <label class="field"><span>Sold by</span><select id="nU"><option value="pcs">Piece</option><option value="kg">Kg</option><option value="dozen">Dozen</option><option value="L">Litre</option><option value="pack">Pack</option></select></label></div>
+      <div class="two"><label class="field"><span>Buying price (৳)</span><input inputmode="decimal" placeholder="For profit"></label>
+      <label class="field"><span>Stock now</span><input id="nS" inputmode="decimal" placeholder="0"></label></div>
+      <label class="field"><span>Short code for quick search</span><input id="nC" placeholder="e.g. mustard"></label>
+      <button class="primary" id="saveP">Save product</button>`;
+    sh.querySelector('#saveP').onclick = () => {
+      const name = $('#nN').value.trim(), price = Number($('#nP').value);
+      if (!name || !price) return toast('Add a name and a sell price to save');
+      products.unshift({id:Date.now(),name,bn:$('#nB').value,cat:'Daily',unit:$('#nU').value,price,stock:Number($('#nS').value)||0,fav:0,code:$('#nC').value||name.toLowerCase().split(' ')[0]});
+      closeSheet(); renderProducts(); renderPList(); toast(`Product saved: ${name}`);
+    };
+  }
+  $('#scrim').classList.add('show'); sh.classList.add('show');
+  setTimeout(() => sh.querySelector('input,button.primary')?.focus(), 260);
+}
+
+/* ----- PDF preview ----- */
+function renderPDF(){
+  const total = todayTotal(), prev = state.days[state.open ? 0 : 1], n = state.sales.length;
+  const pct = Math.round((total-prev.total)/prev.total*100);
+  const lastWeek = state.days[state.open ? 6 : 7];
+  const avg7 = Math.round(state.days.slice(state.open?0:1, state.open?7:8).reduce((a,d)=>a+d.total,0)/7);
+  const itemAgg = {}; state.sales.filter(s=>s.kind==='items').forEach(s => s.items.forEach(([id,q]) => { const p = byId(id); itemAgg[p.name] = itemAgg[p.name] || {q:0,a:0,u:p}; itemAgg[p.name].q += q; itemAgg[p.name].a += p.price*q; }));
+  const top = Object.entries(itemAgg).sort((a,b)=>b[1].a-a[1].a).slice(0,6);
+  const change = d => `<span class="${d>=0?'up':'down'}">${d>=0?'up':'down'} ${Math.abs(d)}%</span>`;
+  $('#a4').innerHTML = `
+    <header><div><div class="shop">Nur Store</div><div>12 Lake Road, Mirpur 10, Dhaka</div></div>
+      <div class="doc"><b>Daily sales report</b>Monday 5 October 2026<br>Opened ${state.openedAt} by ${state.openedBy}<br>${state.open?'Still open':'Closed '+nowTime()+', manual'}</div></header>
+    <div class="result"><span class="num">${tk(total)}</span>
+      <p><b>${change(pct)} on Sunday</b> (${tk(prev.total)})<br>
+      ${change(Math.round((total-lastWeek.total)/lastWeek.total*100))} on last Monday (${tk(lastWeek.total)})<br>
+      ${change(Math.round((total-avg7)/avg7*100))} on the 7-day average (${tk(avg7)})</p></div>
+    <div class="cols">
+      <div><h4>Summary</h4><table>
+        <tr><td>Sales</td><td class="r">${n}</td></tr>
+        <tr><td>Average sale</td><td class="r">${tk(n?Math.round(total/n):0)}</td></tr>
+        <tr><td>Recorded as total only</td><td class="r">${tk(state.sales.filter(s=>s.kind==='quick').reduce((a,s)=>a+s.total,0))}</td></tr>
+        <tr><td>Recorded item by item</td><td class="r">${tk(total-state.sales.filter(s=>s.kind==='quick').reduce((a,s)=>a+s.total,0))}</td></tr>
+      </table></div>
+      <div><h4>Top items</h4><table><tr><th>Item</th><th class="r">Qty</th><th class="r">Amount</th></tr>
+        ${top.map(([n,v])=>`<tr><td>${n}</td><td class="r">${qtyLabel(v.u,v.q)}</td><td class="r">${tk(v.a)}</td></tr>`).join('')}</table></div>
+    </div>
+    <h4>All sales</h4>
+    <table><tr><th>#</th><th>Time</th><th>Details</th><th class="r">Amount</th></tr>
+      ${state.sales.slice(0,14).map(s=>`<tr><td>${s.no}</td><td>${s.time}</td><td>${saleDesc(s)}</td><td class="r">${tk(saleTotal(s))}</td></tr>`).join('')}
+      ${n>14?`<tr><td colspan="4">${n-14} more on page 2</td></tr>`:''}</table>
+    <footer><span>Made by Dokan on ${new Date().toLocaleDateString('en-GB')}</span><span>Page 1 of ${n>14?2:1}</span></footer>`;
+}
+
+function renderAll(){ renderStatus(); renderTabs(); renderQuick(); renderCats(); renderPList(); renderToday(); renderReports(); renderProducts(); renderPDF(); }
+renderAll();
+</script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getDays, getShop, totalsByDate } from "@/lib/data";
 import { pctChange } from "@/lib/format";
 import { getI18n } from "@/lib/i18n-server";
@@ -50,7 +51,7 @@ export default async function ReportsPage() {
             <li className="row" key={d.id} style={{ alignItems: "flex-start" }}>
               <div className="row-main">
                 <div className="row-name">
-                  {f.date(d.day_date)}
+                  <Link href={`/reports/${d.id}`}>{f.date(d.day_date)}</Link>
                   {open && <span className="tag">{t.openNow}</span>}
                 </div>
                 <div className="row-meta">
@@ -65,7 +66,7 @@ export default async function ReportsPage() {
                     </>
                   )}
                 </div>
-                <ReportActions dayId={d.id} fileName={`${slug(settings.shop_name)}-${d.day_date}.pdf`} />
+                <ReportActions dayId={d.id} fileName={`${slug(settings.shop_name)}-${d.day_date}.pdf`} showDetails />
               </div>
               <div className="row-price num">{f.money(d.total)}</div>
             </li>

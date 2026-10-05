@@ -49,6 +49,7 @@ export type BusinessDay = {
 };
 
 export type SaleItem = {
+  id: string;
   product_id: string | null;
   name: string;
   unit: Unit;

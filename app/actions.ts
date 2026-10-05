@@ -86,6 +86,47 @@ export async function voidSale(saleId: string, reason: string): Promise<ActionRe
   return error ? fail(t, error) : done(t.saleVoided);
 }
 
+/** Owner: change a sale. Quick sales: total + note. Item sales: line quantities (by line id), discount, note. */
+export type SaleEdit =
+  | { total: number; note?: string }
+  | { items: { id: string; qty: number }[]; discount?: number; note?: string };
+
+export async function updateSale(saleId: string, edit: SaleEdit): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_sale", { p_sale: saleId, payload: edit });
+  return error ? fail(t, error) : done(t.saleUpdated);
+}
+
+export async function deleteSale(saleId: string): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_sale", { p_sale: saleId });
+  return error ? fail(t, error) : done(t.saleDeleted);
+}
+
+// ---------- past days (reports) ----------
+export async function addSaleToDay(dayId: string, total: number, note: string): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("create_sale", { payload: { kind: "quick", total, note, day_id: dayId } });
+  return error ? fail(t, error) : done(t.saleAdded);
+}
+
+export async function setCountedCash(dayId: string, cash: number | null): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_counted_cash", { p_day: dayId, p_cash: cash });
+  return error ? fail(t, error) : done(t.cashSaved);
+}
+
+export async function deleteDay(dayId: string): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_day", { p_day: dayId });
+  return error ? fail(t, error) : done(t.dayDeleted);
+}
+
 // ---------- products ----------
 const numOrNull = (v: FormDataEntryValue | null) => {
   const s = toAsciiDigits(String(v ?? "")).trim();
@@ -120,6 +161,15 @@ export async function saveProduct(_: ActionResult, form: FormData): Promise<Acti
   if (error?.code === "23505") return { error: t.codeUsed(row.short_code ?? "") };
   if (error?.code === "42501") return { error: t.ownerOnlyProducts };
   return error ? fail(t, error) : done(t.productSaved(row.name));
+}
+
+export async function deleteProduct(id: string, name: string): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const supabase = await createClient();
+  const { error, count } = await supabase.from("products").delete({ count: "exact" }).eq("id", id);
+  if (error) return fail(t, error);
+  if (!count) return { error: t.ownerOnlyProducts };
+  return done(t.productDeleted(name));
 }
 
 // ---------- settings ----------

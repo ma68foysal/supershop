@@ -47,7 +47,7 @@ export async function getSales(dayId: string) {
   const { supabase } = await getShop();
   const { data } = await supabase
     .from("sales")
-    .select("*, sale_items(product_id,name,unit,qty,unit_price,line_total)")
+    .select("*, sale_items(id,product_id,name,unit,qty,unit_price,line_total)")
     .eq("business_day_id", dayId)
     .order("created_at", { ascending: true });
   return (data ?? []) as Sale[];

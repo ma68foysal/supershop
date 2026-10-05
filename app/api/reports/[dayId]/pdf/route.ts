@@ -22,7 +22,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/reports/[day
     supabase.from("settings").select("*").eq("id", 1).single(),
     supabase
       .from("sales")
-      .select("*, sale_items(product_id,name,unit,qty,unit_price,line_total)")
+      .select("*, sale_items(id,product_id,name,unit,qty,unit_price,line_total)")
       .eq("business_day_id", dayId)
       .order("created_at"),
     supabase.from("staff").select("id,name"),

@@ -1,5 +1,5 @@
 -- Dokan — Supabase schema
--- Run once in Supabase → SQL Editor on a new project.
+-- Run once in Supabase → SQL Editor on a new project, then the files in supabase/migrations in order.
 -- Every sale is cash in hand: there is no payment-method data.
 
 create extension if not exists pgcrypto;

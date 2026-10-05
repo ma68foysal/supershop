@@ -1,11 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Spinner, useReportBusy } from "@/components/busy";
 import { useI18n } from "@/components/i18n";
 import { useToast } from "@/components/toast";
 
-export default function ReportActions({ dayId, fileName }: { dayId: string; fileName: string }) {
+export default function ReportActions({
+  dayId,
+  fileName,
+  showDetails,
+}: {
+  dayId: string;
+  fileName: string;
+  showDetails?: boolean;
+}) {
   const { t } = useI18n();
   const url = `/api/reports/${dayId}/pdf`;
   const [busy, setBusy] = useState<"download" | "share" | null>(null);
@@ -60,6 +69,11 @@ export default function ReportActions({ dayId, fileName }: { dayId: string; file
 
   return (
     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+      {showDetails && (
+        <Link className="mini" href={`/reports/${dayId}`}>
+          {t.details}
+        </Link>
+      )}
       <a className="mini" href={url} target="_blank" rel="noopener">
         {t.viewPdf}
       </a>

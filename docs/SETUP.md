@@ -3,6 +3,7 @@
 ## 1. Database (once)
 1. Supabase dashboard → **SQL Editor** → New query.
 2. Paste all of [`supabase/schema.sql`](../supabase/schema.sql) → **Run**.
+   Then run each file in [`supabase/migrations`](../supabase/migrations) in number order.
 3. Optional, so the shop opens/closes on schedule even when nobody has the app open:
    **Database → Extensions** → enable `pg_cron`, then run
    `select cron.schedule('dokan-auto-tick', '*/5 * * * *', 'select public.auto_tick()');`

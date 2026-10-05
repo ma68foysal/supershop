@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
-import { saveProduct } from "@/app/actions";
+import { useActionState, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { deleteProduct, saveProduct } from "@/app/actions";
 import { Spinner, useReportBusy } from "@/components/busy";
+import ConfirmDialog from "@/components/confirm-dialog";
 import { useI18n } from "@/components/i18n";
 import Sheet from "@/components/sheet";
 import { useToast } from "@/components/toast";
@@ -124,6 +125,18 @@ function ProductForm({
   const [state, action, pending] = useActionState(saveProduct, {});
   useReportBusy(pending);
   const toast = useToast();
+  const [asking, setAsking] = useState(false);
+  const stopAsking = useCallback(() => setAsking(false), []);
+  const [deleting, startDelete] = useTransition();
+  useReportBusy(deleting);
+  const remove = () =>
+    startDelete(async () => {
+      const r = await deleteProduct(p!.id, p!.name);
+      if (r.error) return toast(r.error, true);
+      toast(r.message ?? "");
+      setAsking(false);
+      onClose();
+    });
   useEffect(() => {
     if (state.message) {
       toast(state.message);
@@ -209,7 +222,25 @@ function ProductForm({
             t.saveProduct
           )}
         </button>
+        {p && (
+          <button type="button" className="secondary" style={{ color: "var(--khata)", borderColor: "var(--khata)" }} onClick={() => setAsking(true)}>
+            {t.deleteProduct}
+          </button>
+        )}
       </form>
+      {asking && p && (
+        <ConfirmDialog
+          tone="danger"
+          title={t.deleteProductTitle}
+          body={t.deleteProductBody}
+          subject={{ label: p.name_bn || p.name, amount: f.money(p.sell_price) }}
+          confirmLabel={t.yesDelete}
+          pendingLabel={t.deleting}
+          pending={deleting}
+          onConfirm={remove}
+          onCancel={stopAsking}
+        />
+      )}
     </Sheet>
   );
 }

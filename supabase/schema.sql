@@ -56,7 +56,8 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- ============ products ============
-create type public.unit as enum ('pcs', 'kg', 'g', 'L', 'ml', 'pack', 'dozen');
+-- hali = 4 pieces (eggs, bananas)
+create type public.unit as enum ('pcs', 'kg', 'g', 'L', 'ml', 'pack', 'dozen', 'hali');
 
 create table public.products (
   id            uuid primary key default gen_random_uuid(),

@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Spinner, useReportBusy } from "@/components/busy";
+import { useI18n } from "@/components/i18n";
 import { useToast } from "@/components/toast";
 
 export default function ReportActions({ dayId, fileName }: { dayId: string; fileName: string }) {
+  const { t } = useI18n();
   const url = `/api/reports/${dayId}/pdf`;
   const [busy, setBusy] = useState<"download" | "share" | null>(null);
   useReportBusy(busy !== null);
@@ -13,7 +15,7 @@ export default function ReportActions({ dayId, fileName }: { dayId: string; file
   async function getFile() {
     const res = await fetch(url);
     if (!res.ok || res.headers.get("content-type") !== "application/pdf")
-      throw new Error("Could not make the PDF. Check your connection and try again.");
+      throw new Error(t.pdfFailed);
     return new File([await res.blob()], fileName, { type: "application/pdf" });
   }
 
@@ -31,13 +33,13 @@ export default function ReportActions({ dayId, fileName }: { dayId: string; file
       const file = await getFile();
       if (kind === "download") {
         save(file);
-        toast("Report downloaded");
+        toast(t.downloaded);
       } else if (navigator.canShare?.({ files: [file] })) {
         // Phone share menu: WhatsApp, Messenger, email…
         await navigator.share({ files: [file], title: fileName });
       } else {
         save(file);
-        toast("This browser can't share files, so the PDF was downloaded instead");
+        toast(t.cantShare);
       }
     } catch (e) {
       if ((e as Error).name !== "AbortError") toast((e as Error).message, true);
@@ -50,7 +52,7 @@ export default function ReportActions({ dayId, fileName }: { dayId: string; file
     busy === kind ? (
       <>
         <Spinner />
-        Preparing…
+        {t.preparing}
       </>
     ) : (
       text
@@ -59,13 +61,13 @@ export default function ReportActions({ dayId, fileName }: { dayId: string; file
   return (
     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
       <a className="mini" href={url} target="_blank" rel="noopener">
-        View PDF
+        {t.viewPdf}
       </a>
       <button className="mini" onClick={() => run("download")} disabled={busy !== null}>
-        {label("download", "Download")}
+        {label("download", t.download)}
       </button>
       <button className="mini" onClick={() => run("share")} disabled={busy !== null}>
-        {label("share", "Share")}
+        {label("share", t.share)}
       </button>
     </div>
   );

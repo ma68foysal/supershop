@@ -1,5 +1,5 @@
 import LedgerLoader from "@/components/ledger-loader";
 
 export default function Loading() {
-  return <LedgerLoader label="Loading settings" />;
+  return <LedgerLoader label="loadingSettings" />;
 }

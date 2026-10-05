@@ -1,22 +1,21 @@
 import Link from "next/link";
 import { getDays, getSales, getShop, getStaffNames, totalsByDate } from "@/lib/data";
-import { money, qtyLabel, shortDate, timeOf } from "@/lib/format";
+import { getI18n } from "@/lib/i18n-server";
 import VoidSale from "./void-sale";
 
 export const metadata = { title: "Today · Dokan" };
 
 export default async function TodayPage() {
-  const { openDay, settings, me } = await getShop();
-  const days = await getDays(10);
+  const [{ openDay, settings, me }, { t, f }, days] = await Promise.all([getShop(), getI18n(), getDays(10)]);
   // Show the open day, or the most recent closed one
   const day = openDay ?? days[0];
 
   if (!day)
     return (
       <main className="main">
-        <h2 className="h2">No sales yet</h2>
+        <h2 className="h2">{t.noSalesYet}</h2>
         <p className="sub" style={{ marginTop: 6 }}>
-          Tap <b>Open shop</b> at the top, then record sales on the Sell tab. They show up here.
+          {t.noSalesHint}
         </p>
       </main>
     );
@@ -36,99 +35,110 @@ export default async function TodayPage() {
     <main className="main">
       {!openDay && (
         <p className="notice" style={{ marginBottom: 14 }}>
-          The shop is closed. This is {shortDate(day.day_date)}.{" "}
+          {t.closedShowing(f.date(day.day_date))}{" "}
           <Link className="link" href="/reports">
-            See all reports
+            {t.seeAllReports}
           </Link>
         </p>
       )}
       <div className="ledger">
-        <div className="ledger-label">{openDay ? "Sold today so far" : `Sold on ${shortDate(day.day_date)}`}</div>
+        <div className="ledger-label">{openDay ? t.soldTodaySoFar : t.soldOn(f.date(day.day_date))}</div>
         <div className="ledger-amount" style={{ fontSize: 64 }}>
           <span className="tk">৳</span>
-          <span>{total.toLocaleString("en-IN")}</span>
+          <span>{f.num(total)}</span>
         </div>
       </div>
       <div className="facts">
         <div className="fact">
-          <span className="num">{live.length}</span>
-          <span>sales</span>
+          <span className="num">{f.num(live.length)}</span>
+          <span>{t.salesWord}</span>
         </div>
         <div className="fact">
-          <span className="num">{money(live.length ? Math.round(total / live.length) : 0)}</span>
-          <span>average sale</span>
+          <span className="num">{f.money(live.length ? Math.round(total / live.length) : 0)}</span>
+          <span>{t.averageSale}</span>
         </div>
         <div className="fact">
-          <span className="num">{itemsCount}</span>
-          <span>items listed</span>
+          <span className="num">{f.num(itemsCount)}</span>
+          <span>{t.itemsListed}</span>
         </div>
       </div>
       {prevTotal !== null && (
         <p style={{ marginTop: 12, fontSize: 15 }}>
-          {shortDate(prevDate!)} closed at <b>{money(prevTotal)}</b>.{" "}
+          {t.prevClosedAt(f.date(prevDate!), f.money(prevTotal))}{" "}
           {total >= prevTotal ? (
-            <span className="up">{money(total - prevTotal)} ahead.</span>
+            <span className="up">{t.ahead(f.money(total - prevTotal))}</span>
           ) : openDay ? (
-            <>{money(prevTotal - total)} to go to match it.</>
+            t.toGo(f.money(prevTotal - total))
           ) : (
-            <span className="down">{money(prevTotal - total)} less.</span>
+            <span className="down">{t.lessThan(f.money(prevTotal - total))}</span>
           )}
         </p>
       )}
 
       <div className="section-head">
-        <h3>Sales</h3>
-        <span className="sub">{sales.length ? "Newest first, tap to see items" : ""}</span>
+        <h3>{t.salesHeading}</h3>
+        <span className="sub">{sales.length ? t.newestFirst : ""}</span>
       </div>
       <ul className="rows">
-        {[...sales].reverse().map((s) => (
-          <li key={s.id} style={{ borderBottom: "1px solid var(--rule)" }}>
-            <details className="sale">
-              <summary className="row" style={{ borderBottom: 0, opacity: s.voided_at ? 0.55 : 1 }}>
-                <div className="row-main">
-                  <div className="row-name">
-                    {s.kind === "quick"
-                      ? s.note || "Total only"
-                      : s.sale_items.map((i) => i.name).slice(0, 2).join(", ") +
-                        (s.sale_items.length > 2 ? ` +${s.sale_items.length - 2} more` : "")}
-                    {s.kind === "quick" && s.note && <span className="tag">Total only</span>}
-                    {s.voided_at && <span className="tag void">Voided</span>}
+        {[...sales].reverse().map((s) => {
+          const itemNames = s.sale_items.map((i) => i.name);
+          return (
+            <li key={s.id} style={{ borderBottom: "1px solid var(--rule)" }}>
+              <details className="sale">
+                <summary className="row" style={{ borderBottom: 0, opacity: s.voided_at ? 0.55 : 1 }}>
+                  <div className="row-main">
+                    <div className="row-name">
+                      {s.kind === "quick"
+                        ? s.note || t.totalOnly
+                        : itemNames.slice(0, 2).join(", ") +
+                          (itemNames.length > 2 ? ` ${t.moreItems(f.num(itemNames.length - 2))}` : "")}
+                      {s.kind === "quick" && s.note && <span className="tag">{t.totalOnly}</span>}
+                      {s.voided_at && <span className="tag void">{t.voided}</span>}
+                    </div>
+                    <div className="row-meta">
+                      <b>#{f.digits(s.receipt_no)}</b> {f.time(s.created_at, tz)}
+                      {s.created_by && names.get(s.created_by) ? `, ${names.get(s.created_by)}` : ""}
+                    </div>
                   </div>
-                  <div className="row-meta">
-                    <b>#{s.receipt_no}</b> {timeOf(s.created_at, tz)}
-                    {s.created_by && names.get(s.created_by) ? `, ${names.get(s.created_by)}` : ""}
+                  <div
+                    className="row-price num"
+                    style={{ textDecoration: s.voided_at ? "line-through" : undefined }}
+                  >
+                    {f.money(s.total)}
                   </div>
+                </summary>
+                <div className="sale-items">
+                  {s.sale_items.map((i, n) => (
+                    <div key={n}>
+                      <span>
+                        {i.name} × {f.qty(Number(i.qty), i.unit)}
+                      </span>
+                      <span>{f.money(i.line_total)}</span>
+                    </div>
+                  ))}
+                  {s.discount > 0 && (
+                    <div>
+                      <span>{t.discount}</span>
+                      <span>−{f.money(s.discount)}</span>
+                    </div>
+                  )}
+                  {s.voided_at && (
+                    <p>
+                      {t.voided}
+                      {s.void_reason ? `: ${s.void_reason}` : ""}
+                    </p>
+                  )}
+                  {!s.voided_at && me.role === "owner" && <VoidSale saleId={s.id} receiptNo={s.receipt_no} />}
                 </div>
-                <div className="row-price num" style={{ textDecoration: s.voided_at ? "line-through" : undefined }}>
-                  {money(s.total)}
-                </div>
-              </summary>
-              <div className="sale-items">
-                {s.sale_items.map((i, n) => (
-                  <div key={n}>
-                    <span>
-                      {i.name} × {qtyLabel(i.qty, i.unit)}
-                    </span>
-                    <span>{money(i.line_total)}</span>
-                  </div>
-                ))}
-                {s.discount > 0 && (
-                  <div>
-                    <span>Discount</span>
-                    <span>−{money(s.discount)}</span>
-                  </div>
-                )}
-                {s.voided_at && <p>Voided{s.void_reason ? `: ${s.void_reason}` : ""}</p>}
-                {!s.voided_at && me.role === "owner" && <VoidSale saleId={s.id} receiptNo={s.receipt_no} />}
-              </div>
-            </details>
-          </li>
-        ))}
+              </details>
+            </li>
+          );
+        })}
         {!sales.length && (
           <li className="row">
             <div className="row-main">
-              <div className="row-name">No sales yet</div>
-              <div className="row-meta">Sales you record on the Sell tab show up here.</div>
+              <div className="row-name">{t.noSalesYet}</div>
+              <div className="row-meta">{t.salesShowHere}</div>
             </div>
           </li>
         )}

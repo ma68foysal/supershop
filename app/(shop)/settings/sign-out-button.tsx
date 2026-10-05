@@ -2,8 +2,10 @@
 
 import { useFormStatus } from "react-dom";
 import { Spinner, useReportBusy } from "@/components/busy";
+import { useI18n } from "@/components/i18n";
 
 export default function SignOutButton() {
+  const { t } = useI18n();
   const { pending } = useFormStatus();
   useReportBusy(pending);
   return (
@@ -11,10 +13,10 @@ export default function SignOutButton() {
       {pending ? (
         <>
           <Spinner />
-          Signing out…
+          {t.signingOut}
         </>
       ) : (
-        "Sign out"
+        t.signOut
       )}
     </button>
   );

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Anek_Bangla } from "next/font/google";
 import { BusyProvider } from "@/components/busy";
+import { I18nProvider } from "@/components/i18n";
+import { getLang } from "@/lib/i18n-server";
 import "./globals.css";
 
 // One family for Bangla and Latin; the width axis gives the narrow sign-painter numerals.
@@ -23,11 +25,14 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const lang = await getLang();
   return (
-    <html lang="en" className={anek.variable}>
+    <html lang={lang} className={anek.variable}>
       <body>
-        <BusyProvider>{children}</BusyProvider>
+        <I18nProvider lang={lang}>
+          <BusyProvider>{children}</BusyProvider>
+        </I18nProvider>
       </body>
     </html>
   );

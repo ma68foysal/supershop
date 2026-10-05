@@ -3,9 +3,11 @@
 import { useState, useTransition } from "react";
 import { voidSale } from "@/app/actions";
 import { Spinner, useReportBusy } from "@/components/busy";
+import { useI18n } from "@/components/i18n";
 import { useToast } from "@/components/toast";
 
 export default function VoidSale({ saleId, receiptNo }: { saleId: string; receiptNo: number }) {
+  const { t, f } = useI18n();
   const [asking, setAsking] = useState(false);
   const [reason, setReason] = useState("");
   const [pending, start] = useTransition();
@@ -15,7 +17,7 @@ export default function VoidSale({ saleId, receiptNo }: { saleId: string; receip
   if (!asking)
     return (
       <button className="mini" style={{ marginTop: 8 }} onClick={() => setAsking(true)}>
-        Void sale #{receiptNo}
+        {t.voidSale(f.digits(receiptNo))}
       </button>
     );
 
@@ -24,10 +26,10 @@ export default function VoidSale({ saleId, receiptNo }: { saleId: string; receip
       <input
         className="input"
         style={{ padding: "8px 12px" }}
-        placeholder="Reason, e.g. entered twice"
+        placeholder={t.voidReasonPh}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
-        aria-label="Reason for voiding"
+        aria-label={t.voidReasonAria}
         autoFocus
       />
       <button
@@ -36,17 +38,17 @@ export default function VoidSale({ saleId, receiptNo }: { saleId: string; receip
         onClick={() =>
           start(async () => {
             const r = await voidSale(saleId, reason);
-            toast(r.error ?? r.message ?? "Sale voided", Boolean(r.error));
+            toast(r.error ?? r.message ?? t.saleVoided, Boolean(r.error));
           })
         }
       >
         {pending ? (
           <>
             <Spinner />
-            Voiding…
+            {t.voiding}
           </>
         ) : (
-          "Void"
+          t.voidBtn
         )}
       </button>
     </div>

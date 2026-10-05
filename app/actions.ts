@@ -1,7 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { toAsciiDigits, type Lang } from "@/lib/format";
+import { LANG_COOKIE, translateDbError, type Dict } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n-server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import type { ActionResult, Unit } from "@/lib/types";
 
@@ -16,18 +20,27 @@ const done = (message?: string): ActionResult => {
   revalidatePath("/", "layout");
   return { message };
 };
-const fail = (e: { message: string } | null | undefined, fallback = "Something went wrong. Try again.") => ({
-  error: e?.message ?? fallback,
-});
+const fail = (t: Dict, e: { message: string } | null | undefined) => ({ error: translateDbError(t, e?.message) });
+
+// ---------- language ----------
+export async function setLanguage(lang: Lang) {
+  (await cookies()).set(LANG_COOKIE, lang === "en" ? "en" : "bn", {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax",
+  });
+  revalidatePath("/", "layout");
+}
 
 // ---------- auth ----------
 export async function signIn(_: ActionResult, form: FormData): Promise<ActionResult> {
+  const { t } = await getI18n();
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email: toEmail(String(form.get("login") ?? "")),
     password: String(form.get("password") ?? ""),
   });
-  if (error) return { error: "Wrong username or password" };
+  if (error) return { error: t.wrongLogin };
   redirect("/sell");
 }
 
@@ -39,15 +52,17 @@ export async function signOut() {
 
 // ---------- business day ----------
 export async function openDay(): Promise<ActionResult> {
+  const { t } = await getI18n();
   const supabase = await createClient();
   const { error } = await supabase.rpc("open_day", { p_opening_cash: 0 });
-  return error ? fail(error) : done("Shop opened");
+  return error ? fail(t, error) : done(t.shopOpened);
 }
 
 export async function closeDay(countedCash: number | null): Promise<ActionResult> {
+  const { t } = await getI18n();
   const supabase = await createClient();
   const { error } = await supabase.rpc("close_day", { p_counted_cash: countedCash });
-  return error ? fail(error) : done("Shop closed. Today's report is ready");
+  return error ? fail(t, error) : done(t.shopClosedReport);
 }
 
 // ---------- sales ----------
@@ -55,28 +70,31 @@ export type SalePayload =
   | { kind: "quick"; total: number; note?: string }
   | { kind: "items"; items: { product_id: string; qty: number }[]; discount?: number; note?: string };
 
-export async function createSale(payload: SalePayload): Promise<ActionResult & { total?: number }> {
+export async function createSale(payload: SalePayload): Promise<ActionResult & { total?: number; receiptNo?: number }> {
+  const { t } = await getI18n();
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("create_sale", { payload });
-  if (error) return fail(error);
+  if (error) return fail(t, error);
   revalidatePath("/", "layout");
-  return { total: Number(data.total), message: `Sale #${data.receipt_no} saved` };
+  return { total: Number(data.total), receiptNo: Number(data.receipt_no) };
 }
 
 export async function voidSale(saleId: string, reason: string): Promise<ActionResult> {
+  const { t } = await getI18n();
   const supabase = await createClient();
   const { error } = await supabase.rpc("void_sale", { p_sale: saleId, p_reason: reason });
-  return error ? fail(error) : done("Sale voided");
+  return error ? fail(t, error) : done(t.saleVoided);
 }
 
 // ---------- products ----------
 const numOrNull = (v: FormDataEntryValue | null) => {
-  const s = String(v ?? "").trim();
+  const s = toAsciiDigits(String(v ?? "")).trim();
   return s === "" ? null : Number(s);
 };
 const textOrNull = (v: FormDataEntryValue | null) => String(v ?? "").trim() || null;
 
 export async function saveProduct(_: ActionResult, form: FormData): Promise<ActionResult> {
+  const { t } = await getI18n();
   const id = textOrNull(form.get("id"));
   const row = {
     name: String(form.get("name") ?? "").trim(),
@@ -92,21 +110,21 @@ export async function saveProduct(_: ActionResult, form: FormData): Promise<Acti
     active: form.get("active") !== "off",
     updated_at: new Date().toISOString(),
   };
-  if (!row.name) return { error: "Add a product name" };
-  if (row.sell_price === null || Number.isNaN(row.sell_price) || row.sell_price < 0)
-    return { error: "Add a sell price" };
+  if (!row.name) return { error: t.needProductName };
+  if (row.sell_price === null || Number.isNaN(row.sell_price) || row.sell_price < 0) return { error: t.needPrice };
 
   const supabase = await createClient();
   const { error } = id
     ? await supabase.from("products").update(row).eq("id", id)
     : await supabase.from("products").insert(row);
-  if (error?.code === "23505") return { error: `The short code "${row.short_code}" is already used` };
-  if (error?.code === "42501") return { error: "Only the owner can change products" };
-  return error ? fail(error) : done(`Product saved: ${row.name}`);
+  if (error?.code === "23505") return { error: t.codeUsed(row.short_code ?? "") };
+  if (error?.code === "42501") return { error: t.ownerOnlyProducts };
+  return error ? fail(t, error) : done(t.productSaved(row.name));
 }
 
 // ---------- settings ----------
 export async function saveSettings(_: ActionResult, form: FormData): Promise<ActionResult> {
+  const { t } = await getI18n();
   const supabase = await createClient();
   const { error, count } = await supabase
     .from("settings")
@@ -124,24 +142,24 @@ export async function saveSettings(_: ActionResult, form: FormData): Promise<Act
       { count: "exact" },
     )
     .eq("id", 1);
-  if (error) return fail(error);
-  if (!count) return { error: "Only the owner can change settings" };
-  return done("Settings saved");
+  if (error) return fail(t, error);
+  if (!count) return { error: t.ownerOnlySettings };
+  return done(t.settingsSaved);
 }
 
 // ---------- staff ----------
 export async function addStaff(_: ActionResult, form: FormData): Promise<ActionResult> {
+  const { t } = await getI18n();
   const supabase = await createClient();
   const { data: isOwner } = await supabase.rpc("is_owner");
-  if (!isOwner) return { error: "Only the owner can add staff" };
+  if (!isOwner) return { error: t.ownerOnlyStaff };
 
   const name = String(form.get("name") ?? "").trim();
   const username = String(form.get("username") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
-  if (!name) return { error: "Add the person's name" };
-  if (!/^[a-z0-9._-]{3,30}$/.test(username))
-    return { error: "Username needs 3–30 letters or numbers, no spaces" };
-  if (password.length < 6) return { error: "Password needs at least 6 characters" };
+  if (!name) return { error: t.needStaffName };
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) return { error: t.badUsername };
+  if (password.length < 6) return { error: t.shortPassword };
 
   try {
     const admin = createAdminClient();
@@ -151,29 +169,16 @@ export async function addStaff(_: ActionResult, form: FormData): Promise<ActionR
       email_confirm: true,
       user_metadata: { name },
     });
-    if (error) return { error: error.message.includes("already") ? "That username is taken" : error.message };
+    if (error) return { error: error.message.includes("already") ? t.usernameTaken : error.message };
   } catch (e) {
     return { error: (e as Error).message };
   }
-  return done(`${name} can now sign in as "${username}"`);
+  return done(t.staffAdded(name, username));
 }
 
 export async function setStaffActive(id: string, active: boolean): Promise<ActionResult> {
+  const { t } = await getI18n();
   const supabase = await createClient();
   const { error } = await supabase.from("staff").update({ active }).eq("id", id);
-  return error ? fail(error) : done(active ? "Staff member can sign in again" : "Staff member can no longer sign in");
-}
-
-export async function renameMe(_: ActionResult, form: FormData): Promise<ActionResult> {
-  const supabase = await createClient();
-  const name = String(form.get("name") ?? "").trim();
-  if (!name) return { error: "Add a name" };
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  // Staff can only update via owner policy; owners rename themselves here.
-  const { error, count } = await supabase.from("staff").update({ name }, { count: "exact" }).eq("id", user!.id);
-  if (error) return fail(error);
-  if (!count) return { error: "Ask the owner to change your name" };
-  return done("Name saved");
+  return error ? fail(t, error) : done(active ? t.loginOn : t.loginOff);
 }

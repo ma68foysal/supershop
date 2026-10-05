@@ -1,13 +1,15 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
-import { useReportBusy } from "./busy";
 import { usePathname } from "next/navigation";
+import type { Dict } from "@/lib/i18n";
+import { useReportBusy } from "./busy";
+import { useI18n } from "./i18n";
 
 const TABS = [
   {
     href: "/sell",
-    label: "Sell",
+    label: "tabSell" as keyof Dict,
     icon: (
       <>
         <path d="M4 6h16l-1.5 9h-13z" />
@@ -19,7 +21,7 @@ const TABS = [
   },
   {
     href: "/today",
-    label: "Today",
+    label: "tabToday" as keyof Dict,
     icon: (
       <>
         <rect x="4" y="3" width="16" height="18" rx="1" />
@@ -29,7 +31,7 @@ const TABS = [
   },
   {
     href: "/reports",
-    label: "Reports",
+    label: "tabReports" as keyof Dict,
     icon: (
       <>
         <path d="M6 2h9l5 5v15H6z" />
@@ -39,7 +41,7 @@ const TABS = [
   },
   {
     href: "/products",
-    label: "Products",
+    label: "tabProducts" as keyof Dict,
     icon: (
       <>
         <path d="m12 2 9 5v10l-9 5-9-5V7z" />
@@ -51,12 +53,13 @@ const TABS = [
 
 export default function TabBar() {
   const path = usePathname();
+  const { t } = useI18n();
   return (
-    <nav className="tabs" aria-label="Main">
-      {TABS.map((t) => (
-        <Link key={t.href} href={t.href} className="tab" aria-current={path.startsWith(t.href) ? "page" : undefined}>
-          <TabIcon>{t.icon}</TabIcon>
-          {t.label}
+    <nav className="tabs" aria-label={t.mainNav}>
+      {TABS.map((tab) => (
+        <Link key={tab.href} href={tab.href} className="tab" aria-current={path.startsWith(tab.href) ? "page" : undefined}>
+          <TabIcon>{tab.icon}</TabIcon>
+          {t[tab.label] as string}
         </Link>
       ))}
     </nav>

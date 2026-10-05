@@ -3,18 +3,20 @@
 import { useActionState } from "react";
 import { signIn } from "@/app/actions";
 import { Spinner, useReportBusy } from "@/components/busy";
+import { useI18n } from "@/components/i18n";
 
 export default function LoginForm() {
+  const { t } = useI18n();
   const [state, action, pending] = useActionState(signIn, {});
   useReportBusy(pending);
   return (
     <form action={action}>
       <label className="field">
-        <span>Username or email</span>
+        <span>{t.loginField}</span>
         <input name="login" autoComplete="username" autoCapitalize="none" required />
       </label>
       <label className="field">
-        <span>Password</span>
+        <span>{t.password}</span>
         <input name="password" type="password" autoComplete="current-password" required />
       </label>
       {state.error && <p className="error">{state.error}</p>}
@@ -22,14 +24,14 @@ export default function LoginForm() {
         {pending ? (
           <>
             <Spinner />
-            Signing in…
+            {t.signingIn}
           </>
         ) : (
-          "Sign in"
+          t.signIn
         )}
       </button>
       <p className="sub" style={{ marginTop: 16 }}>
-        Staff sign in with the username the owner gave them. The owner signs in with their email.
+        {t.loginHint}
       </p>
     </form>
   );

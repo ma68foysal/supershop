@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { addStaff, saveSettings, setStaffActive } from "@/app/actions";
 import { Spinner, useReportBusy } from "@/components/busy";
+import { useI18n } from "@/components/i18n";
 import { useToast } from "@/components/toast";
 import type { ActionResult, Settings, Staff } from "@/lib/types";
 
@@ -17,6 +18,7 @@ function useResultToast(state: ActionResult, onOk?: () => void) {
 }
 
 export function ShopForm({ settings: s, canEdit }: { settings: Settings; canEdit: boolean }) {
+  const { t } = useI18n();
   const [state, action, pending] = useActionState(saveSettings, {});
   useReportBusy(pending);
   useResultToast(state);
@@ -24,41 +26,41 @@ export function ShopForm({ settings: s, canEdit }: { settings: Settings; canEdit
     <form action={action}>
       <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
         <div className="section-head">
-          <h3>Shop</h3>
+          <h3>{t.shop}</h3>
         </div>
         <label className="field">
-          <span>Shop name</span>
+          <span>{t.shopName}</span>
           <input name="shop_name" defaultValue={s.shop_name} required />
         </label>
         <label className="field">
-          <span>Address (printed on reports)</span>
+          <span>{t.address}</span>
           <input name="address" defaultValue={s.address ?? ""} />
         </label>
         <label className="field">
-          <span>Phone</span>
+          <span>{t.phone}</span>
           <input name="phone" inputMode="tel" defaultValue={s.phone ?? ""} />
         </label>
 
         <div className="section-head">
-          <h3>Opening hours</h3>
+          <h3>{t.hours}</h3>
         </div>
-        <p className="sub">You can always open or close by hand. The automatic times are a backup.</p>
+        <p className="sub">{t.hoursHint}</p>
         <div className="two">
           <label className="field">
-            <span>Opening time</span>
+            <span>{t.openTime}</span>
             <input type="time" name="open_time" defaultValue={s.open_time.slice(0, 5)} />
           </label>
           <label className="field">
-            <span>Closing time</span>
+            <span>{t.closeTime}</span>
             <input type="time" name="close_time" defaultValue={s.close_time.slice(0, 5)} />
           </label>
         </div>
         <label className="check">
-          <span>Open automatically at opening time</span>
+          <span>{t.autoOpen}</span>
           <input type="checkbox" name="auto_open" defaultChecked={s.auto_open} />
         </label>
         <label className="check">
-          <span>Close automatically at closing time</span>
+          <span>{t.autoClose}</span>
           <input type="checkbox" name="auto_close" defaultChecked={s.auto_close} />
         </label>
         {state.error && <p className="error">{state.error}</p>}
@@ -67,15 +69,15 @@ export function ShopForm({ settings: s, canEdit }: { settings: Settings; canEdit
             {pending ? (
               <>
                 <Spinner />
-                Saving…
+                {t.saving}
               </>
             ) : (
-              "Save settings"
+              t.saveSettings
             )}
           </button>
         ) : (
           <p className="sub" style={{ marginTop: 10 }}>
-            Only the owner can change these.
+            {t.ownerOnlySettings}
           </p>
         )}
       </fieldset>
@@ -84,6 +86,7 @@ export function ShopForm({ settings: s, canEdit }: { settings: Settings; canEdit
 }
 
 export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) {
+  const { t } = useI18n();
   const [state, action, pending] = useActionState(addStaff, {});
   useReportBusy(pending);
   const form = useRef<HTMLFormElement>(null);
@@ -96,7 +99,7 @@ export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) 
   return (
     <>
       <div className="section-head">
-        <h3>Staff</h3>
+        <h3>{t.staffHeading}</h3>
       </div>
       <ul className="rows">
         {staff.map((p) => (
@@ -104,8 +107,8 @@ export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) 
             <div className="row-main">
               <div className="row-name">{p.name}</div>
               <div className="row-meta">
-                {p.role === "owner" ? "Owner" : "Staff"}
-                {!p.active && ", can't sign in"}
+                {p.role === "owner" ? t.ownerCap : t.staffCap}
+                {!p.active && `, ${t.cantSignIn}`}
               </div>
             </div>
             {p.id !== meId && (
@@ -123,12 +126,12 @@ export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) 
                 {busy && busyId === p.id ? (
                   <>
                     <Spinner />
-                    Saving…
+                    {t.saving}
                   </>
                 ) : p.active ? (
-                  "Turn off login"
+                  t.turnOffLogin
                 ) : (
-                  "Turn on login"
+                  t.turnOnLogin
                 )}
               </button>
             )}
@@ -138,20 +141,20 @@ export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) 
 
       <form action={action} ref={form}>
         <p className="sub" style={{ marginTop: 14 }}>
-          Add someone who works in the shop. They sign in with the username and password you choose here.
+          {t.addStaffHint}
         </p>
         <label className="field">
-          <span>Name</span>
-          <input name="name" placeholder="e.g. Rahim" required />
+          <span>{t.name}</span>
+          <input name="name" placeholder={t.namePh} required />
         </label>
         <div className="two">
           <label className="field">
-            <span>Username</span>
+            <span>{t.username}</span>
             <input name="username" placeholder="rahim" autoCapitalize="none" required />
           </label>
           <label className="field">
-            <span>Password</span>
-            <input name="password" type="text" placeholder="6 or more" autoComplete="new-password" required />
+            <span>{t.password}</span>
+            <input name="password" type="text" placeholder={t.passwordPh} autoComplete="new-password" required />
           </label>
         </div>
         {state.error && <p className="error">{state.error}</p>}
@@ -159,10 +162,10 @@ export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) 
           {pending ? (
             <>
               <Spinner />
-              Adding…
+              {t.adding}
             </>
           ) : (
-            "Add staff"
+            t.addStaff
           )}
         </button>
       </form>

@@ -1,13 +1,6 @@
-export type Unit = "pcs" | "kg" | "g" | "L" | "ml" | "pack" | "dozen";
-export const UNITS: { value: Unit; label: string }[] = [
-  { value: "pcs", label: "Piece" },
-  { value: "kg", label: "Kg" },
-  { value: "g", label: "Gram" },
-  { value: "L", label: "Litre" },
-  { value: "ml", label: "ml" },
-  { value: "pack", label: "Pack" },
-  { value: "dozen", label: "Dozen" },
-];
+/** hali = 4 pieces, the usual way eggs and bananas are sold */
+export type Unit = "pcs" | "kg" | "g" | "L" | "ml" | "pack" | "dozen" | "hali";
+export const UNITS: Unit[] = ["pcs", "kg", "g", "L", "ml", "pack", "hali", "dozen"];
 
 export type Settings = {
   shop_name: string;

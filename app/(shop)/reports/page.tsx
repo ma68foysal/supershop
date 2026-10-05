@@ -1,21 +1,25 @@
 import { getDays, getShop, totalsByDate } from "@/lib/data";
-import { money, pctChange, shortDate, timeOf } from "@/lib/format";
+import { pctChange } from "@/lib/format";
+import { getI18n } from "@/lib/i18n-server";
 import ReportActions from "./report-actions";
 
 export const metadata = { title: "Reports · Dokan" };
 
 export default async function ReportsPage() {
-  const [{ settings }, days] = await Promise.all([getShop(), getDays(90)]);
+  const [{ settings }, { t, f }, days] = await Promise.all([getShop(), getI18n(), getDays(90)]);
   const byDate = totalsByDate(days);
   const dates = [...byDate.keys()].sort(); // oldest → newest
   const week = dates.slice(-7);
   const max = Math.max(1, ...week.map((d) => byDate.get(d)!));
   const today = days.find((d) => d.status === "open")?.day_date;
+  const tz = settings.timezone;
 
   return (
     <main className="main">
-      <h2 className="h2">Daily reports</h2>
-      <p className="sub">A PDF report is ready for every day the shop was open.</p>
+      <h2 className="h2">{t.reportsTitle}</h2>
+      <p className="sub">
+        {t.reportsSub} {t.pdfInEnglish}
+      </p>
 
       {week.length > 1 && (
         <>
@@ -25,13 +29,13 @@ export default async function ReportsPage() {
                 key={d}
                 className={"bar" + (d === today ? " today" : "")}
                 style={{ height: `${(byDate.get(d)! / max) * 100}%` }}
-                title={`${shortDate(d)} ${money(byDate.get(d)!)}`}
+                title={`${f.date(d)} ${f.money(byDate.get(d)!)}`}
               />
             ))}
           </div>
           <div className="bar-labels" aria-hidden="true">
             {week.map((d) => (
-              <span key={d}>{d === today ? "Today" : shortDate(d).split(" ")[0]}</span>
+              <span key={d}>{d === today ? t.today : f.weekday(d)}</span>
             ))}
           </div>
         </>
@@ -46,32 +50,32 @@ export default async function ReportsPage() {
             <li className="row" key={d.id} style={{ alignItems: "flex-start" }}>
               <div className="row-main">
                 <div className="row-name">
-                  {shortDate(d.day_date)}
-                  {open && <span className="tag">Open now</span>}
+                  {f.date(d.day_date)}
+                  {open && <span className="tag">{t.openNow}</span>}
                 </div>
                 <div className="row-meta">
-                  {d.sales_count} sales, {timeOf(d.opened_at, settings.timezone)}–
-                  {d.closed_at ? timeOf(d.closed_at, settings.timezone) : "now"}
+                  {t.salesCount(f.num(d.sales_count))}, {f.time(d.opened_at, tz)}–
+                  {d.closed_at ? f.time(d.closed_at, tz) : t.now}
                   {pct !== null && !open && (
                     <>
                       ,{" "}
                       <span className={pct >= 0 ? "up" : "down"}>
-                        {pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}% vs {shortDate(prev!)}
+                        {pct >= 0 ? "▲" : "▼"} {f.num(Math.abs(pct))}% {t.vs(f.date(prev!))}
                       </span>
                     </>
                   )}
                 </div>
                 <ReportActions dayId={d.id} fileName={`${slug(settings.shop_name)}-${d.day_date}.pdf`} />
               </div>
-              <div className="row-price num">{money(d.total)}</div>
+              <div className="row-price num">{f.money(d.total)}</div>
             </li>
           );
         })}
         {!days.length && (
           <li className="row">
             <div className="row-main">
-              <div className="row-name">No reports yet</div>
-              <div className="row-meta">Open the shop and record a sale. Each day gets its own PDF.</div>
+              <div className="row-name">{t.noReports}</div>
+              <div className="row-meta">{t.noReportsHint}</div>
             </div>
           </li>
         )}

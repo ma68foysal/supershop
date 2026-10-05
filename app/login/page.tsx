@@ -1,22 +1,24 @@
+import LanguageSwitch from "@/components/language-switch";
+import { getI18n } from "@/lib/i18n-server";
 import { isConfigured } from "@/lib/supabase/env";
 import LoginForm from "./login-form";
 
 export const metadata = { title: "Sign in · Dokan" };
 
 export default async function LoginPage(props: PageProps<"/login">) {
-  const { error } = await props.searchParams;
+  const [{ error }, { t, f }] = await Promise.all([props.searchParams, getI18n()]);
   return (
     <div className="shell">
       <header className="status">
         <div className="shop-name">Dokan</div>
-        <p className="status-text">Daily sales, recorded by hand</p>
+        <p className="status-text">{t.tagline}</p>
       </header>
       <main className="main">
         <div className="ledger" style={{ marginBottom: 20 }}>
-          <div className="ledger-label">Sign in to start selling</div>
+          <div className="ledger-label">{t.signInToStart}</div>
           <div className="ledger-amount empty">
             <span className="tk">৳</span>
-            <span>0</span>
+            <span>{f.digits(0)}</span>
           </div>
         </div>
         {!isConfigured() ? (
@@ -27,12 +29,13 @@ export default async function LoginPage(props: PageProps<"/login">) {
           </div>
         ) : (
           <>
-            {error === "inactive" && (
-              <p className="error">This login has been turned off. Ask the owner to turn it back on.</p>
-            )}
+            {error === "inactive" && <p className="error">{t.inactive}</p>}
             <LoginForm />
           </>
         )}
+        <div style={{ marginTop: 28 }}>
+          <LanguageSwitch />
+        </div>
       </main>
     </div>
   );

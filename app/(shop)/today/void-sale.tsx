@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { voidSale } from "@/app/actions";
+import { Spinner, useReportBusy } from "@/components/busy";
 import { useToast } from "@/components/toast";
 
 export default function VoidSale({ saleId, receiptNo }: { saleId: string; receiptNo: number }) {
   const [asking, setAsking] = useState(false);
   const [reason, setReason] = useState("");
   const [pending, start] = useTransition();
+  useReportBusy(pending);
   const toast = useToast();
 
   if (!asking)
@@ -38,7 +40,14 @@ export default function VoidSale({ saleId, receiptNo }: { saleId: string; receip
           })
         }
       >
-        Void
+        {pending ? (
+          <>
+            <Spinner />
+            Voiding…
+          </>
+        ) : (
+          "Void"
+        )}
       </button>
     </div>
   );

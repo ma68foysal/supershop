@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
+import { useReportBusy } from "./busy";
 import { usePathname } from "next/navigation";
 
 const TABS = [
@@ -54,12 +55,23 @@ export default function TabBar() {
     <nav className="tabs" aria-label="Main">
       {TABS.map((t) => (
         <Link key={t.href} href={t.href} className="tab" aria-current={path.startsWith(t.href) ? "page" : undefined}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            {t.icon}
-          </svg>
+          <TabIcon>{t.icon}</TabIcon>
           {t.label}
         </Link>
       ))}
     </nav>
+  );
+}
+
+/** Bounces while its screen is on the way (only when the tap has to wait). */
+function TabIcon({ children }: { children: React.ReactNode }) {
+  const { pending } = useLinkStatus();
+  useReportBusy(pending);
+  return (
+    <span className="tab-icon" data-pending={pending || undefined}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        {children}
+      </svg>
+    </span>
   );
 }

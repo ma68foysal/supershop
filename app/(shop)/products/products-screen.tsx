@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { saveProduct } from "@/app/actions";
+import { Spinner, useReportBusy } from "@/components/busy";
 import Sheet from "@/components/sheet";
 import { useToast } from "@/components/toast";
 import { money, qtyLabel, unitLabel } from "@/lib/format";
@@ -116,6 +117,7 @@ function ProductForm({
   onClose: () => void;
 }) {
   const [state, action, pending] = useActionState(saveProduct, {});
+  useReportBusy(pending);
   const toast = useToast();
   useEffect(() => {
     if (state.message) {
@@ -193,7 +195,14 @@ function ProductForm({
         )}
         {state.error && <p className="error">{state.error}</p>}
         <button className="primary" disabled={pending}>
-          {pending ? "Saving…" : "Save product"}
+          {pending ? (
+            <>
+              <Spinner />
+              Saving…
+            </>
+          ) : (
+            "Save product"
+          )}
         </button>
       </form>
     </Sheet>

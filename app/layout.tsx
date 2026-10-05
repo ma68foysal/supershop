@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Anek_Bangla } from "next/font/google";
+import { BusyProvider } from "@/components/busy";
 import "./globals.css";
 
 // One family for Bangla and Latin; the width axis gives the narrow sign-painter numerals.
@@ -25,7 +26,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={anek.variable}>
-      <body>{children}</body>
+      <body>
+        <BusyProvider>{children}</BusyProvider>
+      </body>
     </html>
   );
 }

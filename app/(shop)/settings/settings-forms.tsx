@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { addStaff, saveSettings, setStaffActive } from "@/app/actions";
+import { Spinner, useReportBusy } from "@/components/busy";
 import { useToast } from "@/components/toast";
 import type { ActionResult, Settings, Staff } from "@/lib/types";
 
@@ -17,6 +18,7 @@ function useResultToast(state: ActionResult, onOk?: () => void) {
 
 export function ShopForm({ settings: s, canEdit }: { settings: Settings; canEdit: boolean }) {
   const [state, action, pending] = useActionState(saveSettings, {});
+  useReportBusy(pending);
   useResultToast(state);
   return (
     <form action={action}>
@@ -62,7 +64,14 @@ export function ShopForm({ settings: s, canEdit }: { settings: Settings; canEdit
         {state.error && <p className="error">{state.error}</p>}
         {canEdit ? (
           <button className="primary" disabled={pending}>
-            {pending ? "Saving…" : "Save settings"}
+            {pending ? (
+              <>
+                <Spinner />
+                Saving…
+              </>
+            ) : (
+              "Save settings"
+            )}
           </button>
         ) : (
           <p className="sub" style={{ marginTop: 10 }}>
@@ -76,9 +85,12 @@ export function ShopForm({ settings: s, canEdit }: { settings: Settings; canEdit
 
 export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) {
   const [state, action, pending] = useActionState(addStaff, {});
+  useReportBusy(pending);
   const form = useRef<HTMLFormElement>(null);
   useResultToast(state, () => form.current?.reset());
   const [busy, start] = useTransition();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  useReportBusy(busy);
   const toast = useToast();
 
   return (
@@ -102,12 +114,22 @@ export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) 
                 disabled={busy}
                 onClick={() =>
                   start(async () => {
+                    setBusyId(p.id);
                     const r = await setStaffActive(p.id, !p.active);
                     toast(r.error ?? r.message ?? "", Boolean(r.error));
                   })
                 }
               >
-                {p.active ? "Turn off login" : "Turn on login"}
+                {busy && busyId === p.id ? (
+                  <>
+                    <Spinner />
+                    Saving…
+                  </>
+                ) : p.active ? (
+                  "Turn off login"
+                ) : (
+                  "Turn on login"
+                )}
               </button>
             )}
           </li>
@@ -134,7 +156,14 @@ export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) 
         </div>
         {state.error && <p className="error">{state.error}</p>}
         <button className="primary" disabled={pending}>
-          {pending ? "Adding…" : "Add staff"}
+          {pending ? (
+            <>
+              <Spinner />
+              Adding…
+            </>
+          ) : (
+            "Add staff"
+          )}
         </button>
       </form>
     </>

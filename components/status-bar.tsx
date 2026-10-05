@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { closeDay, openDay } from "@/app/actions";
 import { clock12, money, timeOf } from "@/lib/format";
 import type { BusinessDay, Settings } from "@/lib/types";
+import { Spinner, useReportBusy } from "./busy";
 import Sheet from "./sheet";
 import { useToast } from "./toast";
 
@@ -22,6 +23,7 @@ export default function StatusBar({
   const [closing, setClosing] = useState(false);
   const [cash, setCash] = useState("");
   const [pending, start] = useTransition();
+  useReportBusy(pending);
   const toast = useToast();
   const isOpen = Boolean(day);
 
@@ -73,7 +75,16 @@ export default function StatusBar({
           disabled={pending}
           onClick={() => (isOpen ? setClosing(true) : run(openDay))}
         >
-          {isOpen ? "Close shop" : pending ? "Opening…" : "Open shop"}
+          {pending && !closing ? (
+            <>
+              <Spinner />
+              {isOpen ? "Closing…" : "Opening…"}
+            </>
+          ) : isOpen ? (
+            "Close shop"
+          ) : (
+            "Open shop"
+          )}
         </button>
       </div>
 
@@ -91,7 +102,14 @@ export default function StatusBar({
             disabled={pending}
             onClick={() => run(() => closeDay(cash ? Number(cash) : null))}
           >
-            {pending ? "Closing…" : "Close shop and make report"}
+            {pending ? (
+              <>
+                <Spinner />
+                Closing and making the report…
+              </>
+            ) : (
+              "Close shop and make report"
+            )}
           </button>
           <button className="secondary" onClick={() => setClosing(false)}>
             Keep selling

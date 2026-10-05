@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { createSale, type SalePayload } from "@/app/actions";
+import { Spinner, useReportBusy } from "@/components/busy";
 import Sheet from "@/components/sheet";
 import { useToast } from "@/components/toast";
 import { money, qtyLabel, qtyStep, unitLabel } from "@/lib/format";
@@ -22,6 +23,7 @@ export default function SellScreen({
 }) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [pending, start] = useTransition();
+  useReportBusy(pending);
   const toast = useToast();
 
   // Each phone remembers the mode it was last used in
@@ -55,10 +57,10 @@ export default function SellScreen({
         </div>
         {/* Both stay mounted so switching modes keeps the cart and the typed amount */}
         <div hidden={mode !== "quick"}>
-          <QuickSale active={mode === "quick"} disabled={!isOpen || pending} onSave={save} />
+          <QuickSale active={mode === "quick"} disabled={!isOpen || pending} saving={pending} onSave={save} />
         </div>
         <div hidden={mode !== "items"}>
-          <ItemSale products={products} disabled={!isOpen || pending} onSave={save} />
+          <ItemSale products={products} disabled={!isOpen || pending} saving={pending} onSave={save} />
         </div>
     </main>
   );
@@ -68,10 +70,12 @@ export default function SellScreen({
 function QuickSale({
   active,
   disabled,
+  saving,
   onSave,
 }: {
   active: boolean;
   disabled: boolean;
+  saving: boolean;
   onSave: (p: SalePayload, after: () => void) => void;
 }) {
   const [amount, setAmount] = useState("");
@@ -141,7 +145,16 @@ function QuickSale({
           })
         }
       >
-        {value ? `Save sale of ${money(value)}` : "Save sale"}
+        {saving ? (
+          <>
+            <Spinner />
+            Saving {money(value)}…
+          </>
+        ) : value ? (
+          `Save sale of ${money(value)}`
+        ) : (
+          "Save sale"
+        )}
       </button>
     </>
   );
@@ -151,10 +164,12 @@ function QuickSale({
 function ItemSale({
   products,
   disabled,
+  saving,
   onSave,
 }: {
   products: Product[];
   disabled: boolean;
+  saving: boolean;
   onSave: (p: SalePayload, after: () => void) => void;
 }) {
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -351,7 +366,14 @@ function ItemSale({
               )
             }
           >
-            Charge {money(total)}
+            {saving ? (
+              <>
+                <Spinner />
+                Saving {money(total)}…
+              </>
+            ) : (
+              <>Charge {money(total)}</>
+            )}
           </button>
           <button
             className="secondary"

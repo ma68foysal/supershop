@@ -2,9 +2,11 @@
 
 import { useActionState } from "react";
 import { signIn } from "@/app/actions";
+import { Spinner, useReportBusy } from "@/components/busy";
 
 export default function LoginForm() {
   const [state, action, pending] = useActionState(signIn, {});
+  useReportBusy(pending);
   return (
     <form action={action}>
       <label className="field">
@@ -17,7 +19,14 @@ export default function LoginForm() {
       </label>
       {state.error && <p className="error">{state.error}</p>}
       <button className="primary" disabled={pending}>
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? (
+          <>
+            <Spinner />
+            Signing in…
+          </>
+        ) : (
+          "Sign in"
+        )}
       </button>
       <p className="sub" style={{ marginTop: 16 }}>
         Staff sign in with the username the owner gave them. The owner signs in with their email.

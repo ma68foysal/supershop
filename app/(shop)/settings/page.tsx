@@ -1,6 +1,7 @@
 import { signOut } from "@/app/actions";
 import { getShop, getStaffNames } from "@/lib/data";
 import { ShopForm, StaffSection } from "./settings-forms";
+import SignOutButton from "./sign-out-button";
 
 export const metadata = { title: "Settings · Dokan" };
 
@@ -18,7 +19,7 @@ export default async function SettingsPage() {
       {isOwner && <StaffSection staff={staff} meId={me.id} />}
 
       <form action={signOut} style={{ marginTop: 28 }}>
-        <button className="secondary">Sign out</button>
+        <SignOutButton />
       </form>
     </main>
   );

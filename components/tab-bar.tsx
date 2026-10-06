@@ -49,6 +49,17 @@ const TABS = [
       </>
     ),
   },
+  {
+    href: "/srs",
+    label: "tabSrs" as keyof Dict,
+    icon: (
+      <>
+        <circle cx="10" cy="8" r="4" />
+        <path d="M2 21c0-4 3.6-6.5 8-6.5 1.5 0 2.9.3 4 .8" />
+        <path d="M16 15.5l1.5-1.5 3 3-1.5 1.5a1 1 0 0 1-1.2.2 8 8 0 0 1-3-3 1 1 0 0 1 .2-1.2z" />
+      </>
+    ),
+  },
 ];
 
 export default function TabBar() {

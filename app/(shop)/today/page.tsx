@@ -77,7 +77,7 @@ export default async function TodayPage() {
         <h3>{t.salesHeading}</h3>
         <span className="sub">{sales.length ? t.newestFirst : ""}</span>
       </div>
-      <SalesList sales={sales} staff={staff} tz={settings.timezone} isOwner={me.role === "owner"} />
+      <SalesList sales={sales} staff={staff} tz={settings.timezone} canChange={me.role === "owner" || Boolean(openDay)} />
     </main>
   );
 }

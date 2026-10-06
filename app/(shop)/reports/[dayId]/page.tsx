@@ -53,7 +53,7 @@ export default async function DayReportPage(props: PageProps<"/reports/[dayId]">
         <h3>{t.salesHeading}</h3>
         <span className="sub">{sales.length ? t.newestFirst : ""}</span>
       </div>
-      <SalesList sales={sales} staff={staff} tz={tz} isOwner={isOwner} />
+      <SalesList sales={sales} staff={staff} tz={tz} canChange={isOwner || day.status === "open"} />
     </main>
   );
 }

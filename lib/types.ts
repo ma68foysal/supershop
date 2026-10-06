@@ -33,6 +33,18 @@ export type Product = {
   low_stock_at: number | null;
   is_favorite: boolean;
   active: boolean;
+  sr_id: string | null;
+};
+
+/** A company sales representative who takes the shop's orders */
+export type Sr = {
+  id: string;
+  name: string;
+  company: string | null;
+  phone: string;
+  /** 0 = Sunday … 6 = Saturday */
+  visit_days: number[];
+  note: string | null;
 };
 
 export type BusinessDay = {

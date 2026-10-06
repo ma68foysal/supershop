@@ -2,17 +2,18 @@ import { getI18n } from "@/lib/i18n-server";
 import type { Sale, Staff } from "@/lib/types";
 import SaleActions from "./sale-actions";
 
-/** A day's sales, newest first. Tap one to see its items; the owner gets edit, void and delete. */
+/** A day's sales, newest first. Tap one to see its items, and edit, void or delete it when allowed. */
 export default async function SalesList({
   sales,
   staff,
   tz,
-  isOwner,
+  canChange,
 }: {
   sales: Sale[];
   staff: Staff[];
   tz: string;
-  isOwner: boolean;
+  /** Owner always; staff only while this day is open */
+  canChange: boolean;
 }) {
   const { t, f } = await getI18n();
   const names = new Map(staff.map((s) => [s.id, s.name]));
@@ -64,7 +65,7 @@ export default async function SalesList({
                     {s.void_reason ? `: ${s.void_reason}` : ""}
                   </p>
                 )}
-                {isOwner && <SaleActions sale={s} />}
+                {canChange && <SaleActions sale={s} />}
               </div>
             </details>
           </li>

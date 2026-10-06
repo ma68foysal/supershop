@@ -148,6 +148,7 @@ export async function saveProduct(_: ActionResult, form: FormData): Promise<Acti
     stock_qty: numOrNull(form.get("stock_qty")) ?? 0,
     low_stock_at: numOrNull(form.get("low_stock_at")),
     is_favorite: form.get("is_favorite") === "on",
+    sr_id: textOrNull(form.get("sr_id")),
     active: form.get("active") !== "off",
     updated_at: new Date().toISOString(),
   };
@@ -170,6 +171,41 @@ export async function deleteProduct(id: string, name: string): Promise<ActionRes
   if (error) return fail(t, error);
   if (!count) return { error: t.ownerOnlyProducts };
   return done(t.productDeleted(name));
+}
+
+// ---------- company SRs ----------
+export async function saveSr(_: ActionResult, form: FormData): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const id = textOrNull(form.get("id"));
+  const row = {
+    name: String(form.get("name") ?? "").trim(),
+    company: textOrNull(form.get("company")),
+    phone: toAsciiDigits(String(form.get("phone") ?? "")).trim(),
+    visit_days: form
+      .getAll("visit_days")
+      .map(Number)
+      .filter((d) => d >= 0 && d <= 6),
+    note: textOrNull(form.get("note")),
+    updated_at: new Date().toISOString(),
+  };
+  if (!row.name) return { error: t.needSrName };
+  if (!/\d{5,}/.test(row.phone.replace(/\D/g, ""))) return { error: t.needPhone };
+
+  const supabase = await createClient();
+  const { error, count } = id
+    ? await supabase.from("srs").update(row, { count: "exact" }).eq("id", id)
+    : await supabase.from("srs").insert(row, { count: "exact" });
+  if (error?.code === "42501" || (!error && !count)) return { error: t.ownerOnlySrs };
+  return error ? fail(t, error) : done(t.srSaved(row.name));
+}
+
+export async function deleteSr(id: string, name: string): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const supabase = await createClient();
+  const { error, count } = await supabase.from("srs").delete({ count: "exact" }).eq("id", id);
+  if (error) return fail(t, error);
+  if (!count) return { error: t.ownerOnlySrs };
+  return done(t.srDeleted(name));
 }
 
 // ---------- settings ----------

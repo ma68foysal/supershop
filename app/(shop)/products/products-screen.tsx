@@ -7,12 +7,20 @@ import ConfirmDialog from "@/components/confirm-dialog";
 import { useI18n } from "@/components/i18n";
 import Sheet from "@/components/sheet";
 import { useToast } from "@/components/toast";
-import { toAsciiDigits } from "@/lib/format";
-import { UNITS, type Product } from "@/lib/types";
+import { telHref, toAsciiDigits } from "@/lib/format";
+import { UNITS, type Product, type Sr } from "@/lib/types";
 
 const isLow = (p: Product) => p.low_stock_at !== null && Number(p.stock_qty) <= Number(p.low_stock_at);
 
-export default function ProductsScreen({ products, canEdit }: { products: Product[]; canEdit: boolean }) {
+export default function ProductsScreen({
+  products,
+  srs,
+  isOwner,
+}: {
+  products: Product[];
+  srs: Sr[];
+  isOwner: boolean;
+}) {
   const { t, f, lang } = useI18n();
   const [q, setQ] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
@@ -40,11 +48,9 @@ export default function ProductsScreen({ products, canEdit }: { products: Produc
           placeholder={t.searchProducts}
           aria-label={t.searchProducts}
         />
-        {canEdit && (
-          <button className="btn-small" onClick={() => setEditing("new")}>
-            {t.addProduct}
-          </button>
-        )}
+        <button className="btn-small" onClick={() => setEditing("new")}>
+          {t.addProduct}
+        </button>
       </div>
       <p className="sub" style={{ margin: "12px 0 6px" }}>
         {t.productsCount(f.num(products.length))}
@@ -56,20 +62,25 @@ export default function ProductsScreen({ products, canEdit }: { products: Produc
             </button>
           </>
         )}
-        {!canEdit && <>. {t.ownerOnlyProductsNote}</>}
       </p>
 
       <ul className="rows">
         {list.map((p) => {
           const main = lang === "bn" && p.name_bn ? p.name_bn : p.name;
           const other = lang === "bn" && p.name_bn ? p.name : p.name_bn;
+          // Running low and we know who brings it: offer a one-tap call
+          const sr = p.active && isLow(p) && p.sr_id ? srs.find((s) => s.id === p.sr_id) : undefined;
           return (
-            <li key={p.id}>
+            <li key={p.id} style={sr ? { borderBottom: "1px solid var(--rule)" } : undefined}>
               <button
                 className="row"
-                style={{ width: "100%", textAlign: "left", opacity: p.active ? 1 : 0.5 }}
-                onClick={() => canEdit && setEditing(p)}
-                disabled={!canEdit}
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  opacity: p.active ? 1 : 0.5,
+                  borderBottom: sr ? 0 : undefined,
+                }}
+                onClick={() => setEditing(p)}
               >
                 <div className="row-main">
                   <div className="row-name">
@@ -88,6 +99,14 @@ export default function ProductsScreen({ products, canEdit }: { products: Produc
                   <small>{t.perUnit(f.unit(p.unit))}</small>
                 </div>
               </button>
+              {sr && (
+                <a className="low-call" href={telHref(sr.phone)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                    <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />
+                  </svg>
+                  {t.lowCallSr(sr.company ? `${sr.name} (${sr.company})` : sr.name)}
+                </a>
+              )}
             </li>
           );
         })}
@@ -95,7 +114,7 @@ export default function ProductsScreen({ products, canEdit }: { products: Produc
           <li className="row">
             <div className="row-main">
               <div className="row-name">{products.length ? t.nothingMatches(q) : t.noProductsYet}</div>
-              <div className="row-meta">{canEdit ? t.addHintOwner : t.addHintStaff}</div>
+              <div className="row-meta">{t.addHintOwner}</div>
             </div>
           </li>
         )}
@@ -105,6 +124,8 @@ export default function ProductsScreen({ products, canEdit }: { products: Produc
         <ProductForm
           product={editing === "new" ? null : editing}
           categories={categories}
+          srs={srs}
+          isOwner={isOwner}
           onClose={() => setEditing(null)}
         />
       )}
@@ -115,10 +136,14 @@ export default function ProductsScreen({ products, canEdit }: { products: Produc
 function ProductForm({
   product: p,
   categories,
+  srs,
+  isOwner,
   onClose,
 }: {
   product: Product | null;
   categories: string[];
+  srs: Sr[];
+  isOwner: boolean;
   onClose: () => void;
 }) {
   const { t, f } = useI18n();
@@ -198,9 +223,23 @@ function ProductForm({
           </label>
         </div>
         <label className="field">
-          <span>{t.fCost}</span>
-          <input name="cost_price" inputMode="decimal" defaultValue={p?.cost_price ?? ""} />
+          <span>{t.fSr}</span>
+          <select name="sr_id" defaultValue={p?.sr_id ?? ""}>
+            <option value="">{t.noSr}</option>
+            {srs.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.company ? `${s.name} (${s.company})` : s.name}
+              </option>
+            ))}
+          </select>
         </label>
+        {/* Buying price is owner-only; the database keeps it unchanged when staff save */}
+        {isOwner && (
+          <label className="field">
+            <span>{t.fCost}</span>
+            <input name="cost_price" inputMode="decimal" defaultValue={p?.cost_price ?? ""} />
+          </label>
+        )}
         <label className="check">
           <span>{t.fFav}</span>
           <input type="checkbox" name="is_favorite" defaultChecked={p?.is_favorite ?? false} />

@@ -3,7 +3,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "./supabase/server";
 import { addDays, pctChange } from "./format";
-import type { BusinessDay, Product, Sale, Settings, Staff } from "./types";
+import type { BusinessDay, Product, Sale, Settings, Sr, Staff } from "./types";
 
 /**
  * Everything most screens need, loaded once per request:
@@ -36,11 +36,19 @@ export const getShop = cache(async () => {
 });
 
 export async function getProducts(includeInactive = false) {
-  const { supabase } = await getShop();
+  const { supabase, me } = await getShop();
   let q = supabase.from("products").select("*").order("name");
   if (!includeInactive) q = q.eq("active", true);
   const { data } = await q;
-  return (data ?? []) as Product[];
+  const products = (data ?? []) as Product[];
+  // The buying price is the owner's business: staff screens never receive it
+  return me.role === "owner" ? products : products.map((p) => ({ ...p, cost_price: null }));
+}
+
+export async function getSrs() {
+  const { supabase } = await getShop();
+  const { data } = await supabase.from("srs").select("id,name,company,phone,visit_days,note").order("name");
+  return (data ?? []) as Sr[];
 }
 
 export async function getSales(dayId: string) {

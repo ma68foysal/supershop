@@ -94,3 +94,22 @@ export const formatters = (lang: Lang) => ({
   weekday: (d: string) => weekdayShort(d, lang),
 });
 export type Formatters = ReturnType<typeof formatters>;
+
+/* ---------- phone numbers ---------- */
+/** Keep + and digits (Bangla digits converted) for tel: links. */
+export const cleanPhone = (p: string) => toAsciiDigits(p).replace(/[^\d+]/g, "");
+export const telHref = (p: string) => "tel:" + cleanPhone(p);
+/** WhatsApp needs the country code: 017… → 88017… */
+export const waHref = (p: string) => {
+  let d = cleanPhone(p).replace(/^\+/, "");
+  if (d.startsWith("0") && d.length === 11) d = "88" + d;
+  return "https://wa.me/" + d;
+};
+
+/** Day of the week (0 = Sunday) right now in the shop's timezone. */
+export const weekdayNow = (tz: string) => {
+  const name = new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: tz });
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
+};
+/** Bangladeshi week order: Saturday first. */
+export const WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5];

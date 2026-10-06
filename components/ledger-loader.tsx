@@ -3,7 +3,7 @@
 import type { Dict } from "@/lib/i18n";
 import { useI18n } from "./i18n";
 
-type LoaderLabel = "loadingProducts" | "loadingToday" | "loadingReports" | "loadingSettings";
+type LoaderLabel = "loadingProducts" | "loadingToday" | "loadingReports" | "loadingSettings" | "loadingSrs";
 
 /** Screen placeholder while a tab loads: a pen writes across the ledger and rows fill in. */
 export default function LedgerLoader({ label }: { label: LoaderLabel & keyof Dict }) {

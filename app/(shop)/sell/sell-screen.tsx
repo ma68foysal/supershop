@@ -8,6 +8,7 @@ import { useI18n } from "@/components/i18n";
 import Sheet from "@/components/sheet";
 import { useToast } from "@/components/toast";
 import { qtyStep, toAsciiDigits } from "@/lib/format";
+import { fuzzyFilter } from "@/lib/search";
 import type { Product } from "@/lib/types";
 
 export type Mode = "quick" | "items";
@@ -208,11 +209,8 @@ function ItemSale({
   );
 
   const list = useMemo(() => {
-    const s = toAsciiDigits(q.trim().toLowerCase());
-    if (s)
-      return products.filter((p) =>
-        [p.name, p.name_bn, p.short_code].some((v) => v?.toLowerCase().includes(s) || v?.includes(q.trim())),
-      );
+    // Forgiving of spelling: লিচু finds লিচি, "peyaj" finds পেঁয়াজ
+    if (q.trim()) return fuzzyFilter(products, q, (p) => [p.name, p.name_bn, p.short_code, p.category]);
     if (current === FAV) return products.filter((p) => p.is_favorite);
     if (current === ALL) return products;
     return products.filter((p) => p.category === current);

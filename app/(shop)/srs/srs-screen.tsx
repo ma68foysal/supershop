@@ -8,6 +8,7 @@ import { useI18n } from "@/components/i18n";
 import Sheet from "@/components/sheet";
 import { useToast } from "@/components/toast";
 import { telHref, toAsciiDigits, waHref, WEEK_ORDER } from "@/lib/format";
+import { fuzzyFilter } from "@/lib/search";
 import type { Sr } from "@/lib/types";
 
 export type SrStats = { products: number; low: number };
@@ -31,11 +32,8 @@ export default function SrsScreen({
     [srs],
   );
 
-  const s = toAsciiDigits(q.trim().toLowerCase());
-  const list = srs.filter(
-    (r) => !s || [r.name, r.company, toAsciiDigits(r.phone)].some((v) => v?.toLowerCase().includes(s)),
-  );
-  const comingToday = s ? [] : srs.filter((r) => r.visit_days.includes(today));
+  const list = fuzzyFilter(srs, q, (r) => [r.name, r.company, toAsciiDigits(r.phone)]);
+  const comingToday = q.trim() ? [] : srs.filter((r) => r.visit_days.includes(today));
 
   const row = (r: Sr) => (
     <SrRow

@@ -2,6 +2,7 @@ import "server-only";
 import { ApiError, GoogleGenAI, type Content, type FunctionCall, type FunctionDeclaration } from "@google/genai";
 import { pctChange, timeOf, toAsciiDigits, type Lang } from "../format";
 import { getMonthReport, isMonth, todayIn } from "../month";
+import { fuzzyFilter } from "../search";
 import type { createClient } from "../supabase/server";
 import { UNITS, type Product, type Settings, type Sr, type Staff, type Unit } from "../types";
 import type { ChatTurn, ProductFields, Proposal, SaleLine } from "./proposals";
@@ -200,12 +201,6 @@ const productView = (p: Product) => ({
   low_stock_warning: p.low_stock_at === null ? null : Number(p.low_stock_at),
 });
 
-const matches = (query: string, ...fields: (string | null)[]) => {
-  const q = toAsciiDigits(query).toLowerCase().trim();
-  if (!q) return true;
-  const hay = fields.filter(Boolean).join(" ").toLowerCase();
-  return hay.includes(q) || q.split(/\s+/).every((w) => hay.includes(w));
-};
 
 async function openDay(ctx: Ctx) {
   const { data } = await ctx.supabase.from("business_days").select("*").eq("status", "open").maybeSingle();
@@ -243,7 +238,7 @@ const saleSummary = (s: SaleRow) =>
 const handlers: Record<string, (args: Record<string, unknown>, ctx: Ctx) => Promise<Result>> = {
   async search_products({ query }, ctx) {
     const all = (await products(ctx)).filter((p) => p.active);
-    const found = all.filter((p) => matches(String(query ?? ""), p.name, p.name_bn, p.short_code, p.category));
+    const found = fuzzyFilter(all, String(query ?? ""), (p) => [p.name, p.name_bn, p.short_code, p.category]);
     if (found.length) return { count: found.length, products: found.slice(0, 15).map(productView) };
     // Names can be saved in English only ("Lux mini") or spelled differently (গুরা / গুড়া):
     // give the model every name so it can recognise the product itself
@@ -331,7 +326,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: Ctx) => Prom
 
   async find_srs({ query }, ctx) {
     const { data } = await ctx.supabase.from("srs").select("name,company,phone,visit_days,note").order("name");
-    const found = ((data ?? []) as Sr[]).filter((s) => matches(String(query ?? ""), s.name, s.company, s.phone));
+    const found = fuzzyFilter((data ?? []) as Sr[], String(query ?? ""), (s) => [s.name, s.company, s.phone]);
     return { count: found.length, srs: found.slice(0, 15) };
   },
 

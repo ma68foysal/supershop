@@ -7,7 +7,8 @@ import ConfirmDialog from "@/components/confirm-dialog";
 import { useI18n } from "@/components/i18n";
 import Sheet from "@/components/sheet";
 import { useToast } from "@/components/toast";
-import { telHref, toAsciiDigits } from "@/lib/format";
+import { telHref } from "@/lib/format";
+import { fuzzyFilter } from "@/lib/search";
 import { UNITS, type Product, type Sr } from "@/lib/types";
 
 const isLow = (p: Product) => p.low_stock_at !== null && Number(p.stock_qty) <= Number(p.low_stock_at);
@@ -29,11 +30,11 @@ export default function ProductsScreen({
     [products],
   );
   const low = products.filter((p) => p.active && isLow(p)).length;
-  const list = products.filter((p) => {
-    if (lowOnly && !(p.active && isLow(p))) return false;
-    const s = toAsciiDigits(q.trim().toLowerCase());
-    return !s || [p.name, p.name_bn, p.short_code, p.category].some((v) => v?.toLowerCase().includes(s));
-  });
+  const list = fuzzyFilter(
+    products.filter((p) => !lowOnly || (p.active && isLow(p))),
+    q,
+    (p) => [p.name, p.name_bn, p.short_code, p.category],
+  );
 
   return (
     <main className="main">

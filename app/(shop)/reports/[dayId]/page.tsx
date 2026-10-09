@@ -11,7 +11,7 @@ export const metadata = { title: "Report · Dokan" };
 
 export default async function DayReportPage(props: PageProps<"/reports/[dayId]">) {
   const { dayId } = await props.params;
-  const [{ supabase, settings, me }, { t, f }] = await Promise.all([getShop(), getI18n()]);
+  const [{ supabase, settings }, { t, f }] = await Promise.all([getShop(), getI18n()]);
   const { data } = await supabase.from("business_days").select("*").eq("id", dayId).maybeSingle();
   if (!data) notFound();
   const day = data as BusinessDay;
@@ -20,7 +20,6 @@ export default async function DayReportPage(props: PageProps<"/reports/[dayId]">
   const live = sales.filter((s) => !s.voided_at);
   const total = live.reduce((a, s) => a + Number(s.total), 0);
   const tz = settings.timezone;
-  const isOwner = me.role === "owner";
   const fileName = `${settings.shop_name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "shop"}-${day.day_date}.pdf`;
 
   return (
@@ -47,13 +46,13 @@ export default async function DayReportPage(props: PageProps<"/reports/[dayId]">
       </div>
       <ReportActions dayId={day.id} fileName={fileName} />
 
-      {isOwner && <DayTools day={day} salesCount={live.length} total={total} />}
+      <DayTools day={day} salesCount={live.length} total={total} />
 
       <div className="section-head">
         <h3>{t.salesHeading}</h3>
         <span className="sub">{sales.length ? t.newestFirst : ""}</span>
       </div>
-      <SalesList sales={sales} staff={staff} tz={tz} canChange={isOwner || day.status === "open"} />
+      <SalesList sales={sales} staff={staff} tz={tz} canChange />
     </main>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { addStaff, saveSettings, setStaffActive } from "@/app/actions";
+import { addStaff, saveSettings, setStaffActive, setStaffRole } from "@/app/actions";
 import { Spinner, useReportBusy } from "@/components/busy";
 import { useI18n } from "@/components/i18n";
 import { useToast } from "@/components/toast";
@@ -112,28 +112,52 @@ export function StaffSection({ staff, meId }: { staff: Staff[]; meId: string }) 
               </div>
             </div>
             {p.id !== meId && (
-              <button
-                className="mini"
-                disabled={busy}
-                onClick={() =>
-                  start(async () => {
-                    setBusyId(p.id);
-                    const r = await setStaffActive(p.id, !p.active);
-                    toast(r.error ?? r.message ?? "", Boolean(r.error));
-                  })
-                }
-              >
-                {busy && busyId === p.id ? (
-                  <>
-                    <Spinner />
-                    {t.saving}
-                  </>
-                ) : p.active ? (
-                  t.turnOffLogin
-                ) : (
-                  t.turnOnLogin
-                )}
-              </button>
+              <div className="staff-actions">
+                <button
+                  className="mini"
+                  disabled={busy}
+                  onClick={() =>
+                    start(async () => {
+                      setBusyId(p.id + "role");
+                      const r = await setStaffRole(p.id, p.name, p.role === "owner" ? "cashier" : "owner");
+                      toast(r.error ?? r.message ?? "", Boolean(r.error));
+                    })
+                  }
+                >
+                  {busy && busyId === p.id + "role" ? (
+                    <>
+                      <Spinner />
+                      {t.saving}
+                    </>
+                  ) : p.role === "owner" ? (
+                    t.makeStaff
+                  ) : (
+                    t.makeOwner
+                  )}
+                </button>
+                <button
+                  className="mini"
+                  disabled={busy}
+                  onClick={() =>
+                    start(async () => {
+                      setBusyId(p.id);
+                      const r = await setStaffActive(p.id, !p.active);
+                      toast(r.error ?? r.message ?? "", Boolean(r.error));
+                    })
+                  }
+                >
+                  {busy && busyId === p.id ? (
+                    <>
+                      <Spinner />
+                      {t.saving}
+                    </>
+                  ) : p.active ? (
+                    t.turnOffLogin
+                  ) : (
+                    t.turnOnLogin
+                  )}
+                </button>
+              </div>
             )}
           </li>
         ))}

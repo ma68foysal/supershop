@@ -15,11 +15,9 @@ const isLow = (p: Product) => p.low_stock_at !== null && Number(p.stock_qty) <= 
 export default function ProductsScreen({
   products,
   srs,
-  isOwner,
 }: {
   products: Product[];
   srs: Sr[];
-  isOwner: boolean;
 }) {
   const { t, f, lang } = useI18n();
   const [q, setQ] = useState("");
@@ -125,7 +123,6 @@ export default function ProductsScreen({
           product={editing === "new" ? null : editing}
           categories={categories}
           srs={srs}
-          isOwner={isOwner}
           onClose={() => setEditing(null)}
         />
       )}
@@ -137,13 +134,11 @@ function ProductForm({
   product: p,
   categories,
   srs,
-  isOwner,
   onClose,
 }: {
   product: Product | null;
   categories: string[];
   srs: Sr[];
-  isOwner: boolean;
   onClose: () => void;
 }) {
   const { t, f } = useI18n();
@@ -233,13 +228,10 @@ function ProductForm({
             ))}
           </select>
         </label>
-        {/* Buying price is owner-only; the database keeps it unchanged when staff save */}
-        {isOwner && (
-          <label className="field">
-            <span>{t.fCost}</span>
-            <input name="cost_price" inputMode="decimal" defaultValue={p?.cost_price ?? ""} />
-          </label>
-        )}
+        <label className="field">
+          <span>{t.fCost}</span>
+          <input name="cost_price" inputMode="decimal" defaultValue={p?.cost_price ?? ""} />
+        </label>
         <label className="check">
           <span>{t.fFav}</span>
           <input type="checkbox" name="is_favorite" defaultChecked={p?.is_favorite ?? false} />

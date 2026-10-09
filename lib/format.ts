@@ -85,6 +85,14 @@ export const addDays = (d: string, n: number) => {
 export const pctChange = (now: number, before: number) =>
   before > 0 ? Math.round(((now - before) / before) * 100) : null;
 
+/** "2026-10" → "October 2026" / "অক্টোবর ২০২৬" */
+export const monthName = (ym: string, lang: Lang = "en") =>
+  new Date(ym + "-01T00:00:00Z").toLocaleDateString(lang === "bn" ? "bn-BD" : "en-GB", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
 /** All screen formatters bound to one language. */
 export const formatters = (lang: Lang) => ({
   num: (n: number) => num(n, lang),
@@ -96,6 +104,7 @@ export const formatters = (lang: Lang) => ({
   clock: (t: string) => clock12(t, lang),
   date: (d: string) => shortDate(d, lang),
   weekday: (d: string) => weekdayShort(d, lang),
+  month: (ym: string) => monthName(ym, lang),
 });
 export type Formatters = ReturnType<typeof formatters>;
 

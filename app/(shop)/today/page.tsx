@@ -6,7 +6,7 @@ import SalesList from "@/components/sales-list";
 export const metadata = { title: "Today · Dokan" };
 
 export default async function TodayPage() {
-  const [{ openDay, settings, me }, { t, f }, days] = await Promise.all([getShop(), getI18n(), getDays(10)]);
+  const [{ openDay, settings }, { t, f }, days] = await Promise.all([getShop(), getI18n(), getDays(10)]);
   // Show the open day, or the most recent closed one
   const day = openDay ?? days[0];
 
@@ -77,7 +77,7 @@ export default async function TodayPage() {
         <h3>{t.salesHeading}</h3>
         <span className="sub">{sales.length ? t.newestFirst : ""}</span>
       </div>
-      <SalesList sales={sales} staff={staff} tz={settings.timezone} canChange={me.role === "owner" || Boolean(openDay)} />
+      <SalesList sales={sales} staff={staff} tz={settings.timezone} canChange />
     </main>
   );
 }

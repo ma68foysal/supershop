@@ -23,7 +23,7 @@ export default async function SettingsPage() {
         {t.languageHint}
       </p>
 
-      <ShopForm settings={settings} canEdit={isOwner} />
+      <ShopForm settings={settings} canEdit />
       {isOwner && <StaffSection staff={staff} meId={me.id} />}
 
       <form action={signOut} style={{ marginTop: 28 }}>

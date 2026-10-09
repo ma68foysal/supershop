@@ -1,6 +1,7 @@
 import "server-only";
 import { ApiError, GoogleGenAI, type Content, type FunctionCall, type FunctionDeclaration } from "@google/genai";
-import { timeOf, toAsciiDigits, type Lang } from "../format";
+import { pctChange, timeOf, toAsciiDigits, type Lang } from "../format";
+import { getMonthReport, isMonth, todayIn } from "../month";
 import type { createClient } from "../supabase/server";
 import { UNITS, type Product, type Settings, type Sr, type Staff, type Unit } from "../types";
 import type { ChatTurn, ProductFields, Proposal, SaleLine } from "./proposals";
@@ -63,6 +64,12 @@ const TOOLS: FunctionDeclaration[] = [
     name: "recent_sales",
     description: "The latest sales of the current day (receipt number, time, items, total, voided or not).",
     parametersJsonSchema: obj({ limit: { type: "integer", description: "How many, default 5" } }),
+  },
+  {
+    name: "month_summary",
+    description:
+      "Sales for a whole month: total, days open, average a day, change vs last month, best day, profit, top items. month is like 2026-10; leave it out for this month.",
+    parametersJsonSchema: obj({ month: { type: "string" } }),
   },
   {
     name: "find_srs",
@@ -300,6 +307,28 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: Ctx) => Prom
     };
   },
 
+  async month_summary({ month }, ctx) {
+    const tz = ctx.settings.timezone;
+    const m = isMonth(month) ? month : todayIn(tz).slice(0, 7);
+    const r = await getMonthReport(ctx.supabase, m, tz);
+    const best = r.cur.days.reduce<{ date: string; total: number } | null>((a, d) => (!a || d.total > a.total ? d : a), null);
+    return {
+      month: m,
+      month_so_far: r.isCurrent,
+      total: r.cur.total,
+      sales: r.cur.sales,
+      days_open: r.cur.days.length,
+      average_a_day: r.cur.days.length ? Math.round(r.cur.total / r.cur.days.length) : 0,
+      last_month: { total: r.prev.total, same_days_only: r.sameDays, change_percent: pctChange(r.cur.total, r.prev.total) },
+      best_day: best,
+      profit: r.profit,
+      profit_margin_percent: r.margin,
+      profit_covers_percent_of_item_sales: r.costCoverage,
+      discounts: r.cur.discount,
+      top_items: r.cur.top_items.slice(0, 5),
+    };
+  },
+
   async find_srs({ query }, ctx) {
     const { data } = await ctx.supabase.from("srs").select("name,company,phone,visit_days,note").order("name");
     const found = ((data ?? []) as Sr[]).filter((s) => matches(String(query ?? ""), s.name, s.company, s.phone));
@@ -487,14 +516,14 @@ It is ${date}, ${timeOf(now.toISOString(), tz)}. Every sale is paid in cash; the
 Reply in ${language} unless the person writes or speaks in the other language. Keep replies short: one to three plain sentences, no markdown.
 
 How to work:
-- Answer questions from the information below; use the tools for anything not covered (recent_sales, low_stock with SR phone numbers, find_srs).
+- Answer questions from the information below; use the tools for anything not covered (month_summary for a month's sales and profit, recent_sales, low_stock with SR phone numbers, find_srs).
 - Any change (a sale, a price, stock, name or code change, a new product or SR, opening or closing the shop, voiding a sale) must go through the matching propose_ tool. The app shows it as a card and nothing is saved until the person taps confirm. When the request is clear, call the propose_ tool right away without asking permission first. Never claim something is saved or done.
 - Use product_id values exactly as listed below. Never invent ids, prices or stock. If a name could mean several products, ask which one. Names may be in English only ("Lux mini") or spelled differently (গুরা / গুড়া): match by meaning. If nothing matches, say so and offer to add the product or record a total-only sale.
 - If any item in a request is unclear or not found, ask about it first and prepare the whole sale together once it is clear.
 - Quantities: আধা কেজি = 0.5 kg, দেড় কেজি = 1.5 kg, এক পোয়া = 0.25 kg, ২৫০ গ্রাম = 0.25 kg, এক হালি = 4 pieces (or 1 if the product's unit is hali), এক ডজন = 12 pieces (or 1 if the unit is dozen). Convert to the product's own unit.
 - "১০ টাকার চিনি" means selling by money: use amount_taka, not qty. "১০০ টাকার বিক্রি" with no product means a total-only sale (propose_quick_sale).
 - For a voice message, start your reply with what you heard in quotes on its own line, then answer.
-- If a tool returns an error, explain it simply. Staff cannot change past days, settings, or the buying price.
+- If a tool returns an error, explain it simply.
 
 Today right now: ${JSON.stringify(today)}
 Running low: ${low.length ? low.join(", ") : "nothing"}

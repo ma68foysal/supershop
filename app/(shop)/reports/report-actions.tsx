@@ -6,17 +6,20 @@ import { Spinner, useReportBusy } from "@/components/busy";
 import { useI18n } from "@/components/i18n";
 import { useToast } from "@/components/toast";
 
+/** View / download / share a report PDF: a day's (dayId) or any other report's (pdfUrl). */
 export default function ReportActions({
   dayId,
+  pdfUrl,
   fileName,
   showDetails,
 }: {
-  dayId: string;
+  dayId?: string;
+  pdfUrl?: string;
   fileName: string;
   showDetails?: boolean;
 }) {
   const { t } = useI18n();
-  const url = `/api/reports/${dayId}/pdf`;
+  const url = pdfUrl ?? `/api/reports/${dayId}/pdf`;
   const [busy, setBusy] = useState<"download" | "share" | null>(null);
   useReportBusy(busy !== null);
   const toast = useToast();
@@ -69,7 +72,7 @@ export default function ReportActions({
 
   return (
     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-      {showDetails && (
+      {showDetails && dayId && (
         <Link className="mini" href={`/reports/${dayId}`}>
           {t.details}
         </Link>

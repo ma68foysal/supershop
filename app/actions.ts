@@ -269,6 +269,16 @@ export async function addStaff(_: ActionResult, form: FormData): Promise<ActionR
   return done(t.staffAdded(name, username));
 }
 
+/** Owner only (database rule): give someone the owner's full access, or make them staff again. */
+export async function setStaffRole(id: string, name: string, role: "owner" | "cashier"): Promise<ActionResult> {
+  const { t } = await getI18n();
+  const supabase = await createClient();
+  const { error, count } = await supabase.from("staff").update({ role }, { count: "exact" }).eq("id", id);
+  if (error) return fail(t, error);
+  if (!count) return { error: t.ownerOnlyStaff };
+  return done(t.roleChanged(name));
+}
+
 export async function setStaffActive(id: string, active: boolean): Promise<ActionResult> {
   const { t } = await getI18n();
   const supabase = await createClient();

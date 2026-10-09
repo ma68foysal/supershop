@@ -1473,3 +1473,62 @@ details.sale > summary::-webkit-details-marker {
   background: var(--khata);
   animation: fade 0.8s infinite alternate;
 }
+
+/* ---------- monthly report ---------- */
+.month-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--khata);
+  border-radius: 8px;
+  background: var(--sheet);
+  font-size: 22px;
+  color: var(--ink-2);
+}
+.month-link b {
+  display: block;
+  font-size: 17px;
+  color: var(--ink);
+}
+.month-link small {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.month-nav .mini {
+  font-size: 20px;
+  padding: 4px 14px;
+}
+.bars.month {
+  gap: 2px;
+}
+.bar-labels.month {
+  gap: 2px;
+  font-size: 11px;
+}
+.profit-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.profit-line .num {
+  font-size: 40px;
+  line-height: 1.1;
+}
+
+.staff-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}

@@ -36,13 +36,11 @@ export const getShop = cache(async () => {
 });
 
 export async function getProducts(includeInactive = false) {
-  const { supabase, me } = await getShop();
+  const { supabase } = await getShop();
   let q = supabase.from("products").select("*").order("name");
   if (!includeInactive) q = q.eq("active", true);
   const { data } = await q;
-  const products = (data ?? []) as Product[];
-  // The buying price is the owner's business: staff screens never receive it
-  return me.role === "owner" ? products : products.map((p) => ({ ...p, cost_price: null }));
+  return (data ?? []) as Product[];
 }
 
 export async function getSrs() {

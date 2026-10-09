@@ -18,6 +18,13 @@ export default async function ReportsPage() {
   return (
     <main className="main">
       <h2 className="h2">{t.reportsTitle}</h2>
+      <Link href="/reports/month" className="month-link">
+        <span>
+          <b>{t.monthly}</b>
+          <small>{t.monthlyHint}</small>
+        </span>
+        <span aria-hidden="true">›</span>
+      </Link>
       <p className="sub">
         {t.reportsSub} {t.pdfInEnglish}
       </p>

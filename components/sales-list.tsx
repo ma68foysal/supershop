@@ -12,7 +12,6 @@ export default async function SalesList({
   sales: Sale[];
   staff: Staff[];
   tz: string;
-  /** Owner always; staff only while this day is open */
   canChange: boolean;
 }) {
   const { t, f } = await getI18n();

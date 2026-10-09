@@ -1,4 +1,4 @@
-import { AssistantError, runAssistant } from "@/lib/assistant/agent";
+import { AssistantError, runAssistant, type Audio } from "@/lib/assistant/agent";
 import type { ChatTurn } from "@/lib/assistant/proposals";
 import { DICTS } from "@/lib/i18n";
 import { getLang } from "@/lib/i18n-server";
@@ -24,8 +24,14 @@ export async function POST(request: Request) {
   if (!me?.active) return Response.json({ error: t.inactive }, { status: 403 });
 
   let history: ChatTurn[];
+  let audio: Audio | undefined;
   try {
     const body = await request.json();
+    // A voice message: a short WAV recording (about 30 s at most)
+    if (body.audio && typeof body.audio.data === "string" && body.audio.mimeType === "audio/wav") {
+      if (body.audio.data.length > 2_500_000) return Response.json({ error: t.aiTooLong }, { status: 413 });
+      audio = { mimeType: "audio/wav", data: body.audio.data };
+    }
     history = (Array.isArray(body.history) ? body.history : [])
       .filter((m: ChatTurn) => (m.role === "user" || m.role === "model") && typeof m.text === "string")
       .map((m: ChatTurn) => ({ role: m.role, text: m.text.slice(0, 2000) }));
@@ -42,7 +48,7 @@ export async function POST(request: Request) {
       me: me as Staff,
       settings: settings as Settings,
       lang,
-    });
+    }, audio);
     return Response.json(result);
   } catch (e) {
     const code = e instanceof AssistantError ? e.code : "failed";

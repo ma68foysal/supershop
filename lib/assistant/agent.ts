@@ -6,11 +6,13 @@ import { UNITS, type Product, type Settings, type Sr, type Staff, type Unit } fr
 import type { ChatTurn, ProductFields, Proposal, SaleLine } from "./proposals";
 
 /**
- * Tried in order; a later one is used when Google says the first is busy or over its free
- * per-minute limit (each model has its own). gemini-3.8-flash allows only 5 requests a minute
- * on the free tier and is often overloaded, so it goes last.
+ * Tried in order. The "lite" models get far more free requests a day than the full ones
+ * (gemini-3.5-flash allows only 20), and gemini-3.5-flash-lite answers a sale in about a second.
  */
-const MODELS = (process.env.GEMINI_MODELS ?? "gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3.8-flash")
+const MODELS = (
+  process.env.GEMINI_MODELS ??
+  "gemini-3.5-flash-lite,gemini-flash-lite-latest,gemini-3.1-flash-lite,gemini-3.5-flash,gemini-3.8-flash"
+)
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
@@ -457,35 +459,52 @@ async function runTool(call: FunctionCall, ctx: Ctx): Promise<Result> {
 }
 
 /* ---------------- the conversation ---------------- */
-function systemPrompt(ctx: Ctx, isOpen: boolean) {
+
+/**
+ * Everything the model usually needs goes into the instructions up front (products, today's
+ * numbers), so most turns take a single request: the free tier counts requests per day.
+ */
+async function systemPrompt(ctx: Ctx) {
   const now = new Date();
-  const date = now.toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: ctx.settings.timezone,
-  });
+  const tz = ctx.settings.timezone;
+  const date = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: tz });
   const language = ctx.lang === "bn" ? "Bangla (use Bangla digits)" : "English";
+
+  const [today, all] = await Promise.all([handlers.today_summary({}, ctx), products(ctx)]);
+  const active = all.filter((p) => p.active);
+  const catalog = active
+    .slice(0, 400)
+    .map((p) => [p.id, p.name, p.name_bn ?? "", p.unit, Number(p.sell_price), Number(p.stock_qty), p.short_code ?? ""].join(" | "))
+    .join("\n");
+  const low = active
+    .filter((p) => p.low_stock_at !== null && Number(p.stock_qty) <= Number(p.low_stock_at))
+    .map((p) => p.name_bn || p.name);
+
   return `You are the assistant inside "Dokan", the sales app of ${ctx.settings.shop_name}, a small neighbourhood grocery shop in Bangladesh.
 You are helping ${ctx.me.name}, the ${ctx.me.role === "owner" ? "owner" : "shop staff"}.
-It is ${date}, ${timeOf(now.toISOString(), ctx.settings.timezone)}. The shop is ${isOpen ? "open" : "closed"}.
-Every sale is paid in cash; there are no payment methods. Money is in taka (৳).
+It is ${date}, ${timeOf(now.toISOString(), tz)}. Every sale is paid in cash; there are no payment methods. Money is in taka (৳).
 
-Reply in ${language} unless the person writes in the other language. Keep replies short: one to three plain sentences, no markdown.
+Reply in ${language} unless the person writes or speaks in the other language. Keep replies short: one to three plain sentences, no markdown.
 
 How to work:
-- Questions: use the read tools (search_products, today_summary, low_stock, recent_sales, find_srs) and answer from their results only.
-- Any change (a sale, a price or stock change, a new product or SR, opening or closing the shop, voiding a sale) must go through the matching propose_ tool. The app shows it as a card and nothing is saved until the person taps confirm. When the request is clear, call the propose_ tool right away without asking permission first. Only say you prepared something after the propose_ tool returned success; then say in one short line what you prepared and ask them to check and confirm. Never claim something is saved or done.
+- Answer questions from the information below; use the tools for anything not covered (recent_sales, low_stock with SR phone numbers, find_srs).
+- Any change (a sale, a price, stock, name or code change, a new product or SR, opening or closing the shop, voiding a sale) must go through the matching propose_ tool. The app shows it as a card and nothing is saved until the person taps confirm. When the request is clear, call the propose_ tool right away without asking permission first. Never claim something is saved or done.
+- Use product_id values exactly as listed below. Never invent ids, prices or stock. If a name could mean several products, ask which one. Names may be in English only ("Lux mini") or spelled differently (গুরা / গুড়া): match by meaning. If nothing matches, say so and offer to add the product or record a total-only sale.
 - If any item in a request is unclear or not found, ask about it first and prepare the whole sale together once it is clear.
-- Before selling or changing a product, call search_products to get its product_id. Never invent product ids, prices or stock. If a name could mean several products, ask which one. If nothing matches, say so and offer to add the product or record the amount as a total-only sale.
 - Quantities: আধা কেজি = 0.5 kg, দেড় কেজি = 1.5 kg, এক পোয়া = 0.25 kg, ২৫০ গ্রাম = 0.25 kg, এক হালি = 4 pieces (or 1 if the product's unit is hali), এক ডজন = 12 pieces (or 1 if the unit is dozen). Convert to the product's own unit.
 - "১০ টাকার চিনি" means selling by money: use amount_taka, not qty. "১০০ টাকার বিক্রি" with no product means a total-only sale (propose_quick_sale).
-- If a tool returns an error, explain it simply. Staff cannot change past days, settings, or the buying price.`;
+- For a voice message, start your reply with what you heard in quotes on its own line, then answer.
+- If a tool returns an error, explain it simply. Staff cannot change past days, settings, or the buying price.
+
+Today right now: ${JSON.stringify(today)}
+Running low: ${low.length ? low.join(", ") : "nothing"}
+
+Products (product_id | English name | Bangla name | unit | price per unit | stock | short code):
+${catalog || "(no products yet)"}`;
 }
 
 /** Plain text history only; consecutive turns from the same side are merged. */
-function toContents(history: ChatTurn[]): Content[] {
+function toContents(history: ChatTurn[], audio?: Audio): Content[] {
   const turns: ChatTurn[] = [];
   for (const t of history.slice(-MAX_HISTORY)) {
     const text = t.text.trim();
@@ -495,81 +514,103 @@ function toContents(history: ChatTurn[]): Content[] {
     else turns.push({ role: t.role, text });
   }
   while (turns.length && turns[0].role !== "user") turns.shift();
-  return turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] }));
+  const contents: Content[] = turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] }));
+  // The newest message was spoken: send the recording itself
+  const last = contents[contents.length - 1];
+  if (audio && last?.role === "user") {
+    last.parts = [{ inlineData: { mimeType: audio.mimeType, data: audio.data } }, { text: "(voice message)" }];
+  }
+  return contents;
 }
 
-const retryable = (e: unknown) => e instanceof ApiError && [404, 429, 500, 503].includes(e.status);
+export type Audio = { mimeType: string; data: string };
+
+const retryable = (e: unknown) => !(e instanceof ApiError) || [404, 408, 429, 500, 502, 503, 504].includes(e.status);
 // Google puts the details in the error text: which limit was hit, and when to retry
 const isDailyLimit = (e: unknown) => e instanceof ApiError && e.status === 429 && /PerDay/i.test(e.message);
 const retryAfterMs = (e: unknown) => {
   const m = e instanceof ApiError ? /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(e.message) : null;
-  return m ? Number(m[1]) * 1000 : 2000;
+  return m ? Number(m[1]) * 1000 : null;
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function runAssistant(history: ChatTurn[], base: Omit<Ctx, "proposals">) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new AssistantError("config");
-  const ai = new GoogleGenAI({ apiKey });
-  const ctx: Ctx = { ...base, proposals: [] };
-  const contents = toContents(history);
-  const config = {
-    systemInstruction: systemPrompt(ctx, Boolean(await openDay(ctx))),
-    tools: [{ functionDeclarations: TOOLS }],
-  };
+/**
+ * Models that are out of quota or failing are skipped until this time. Lives as long as the
+ * server instance, so a used-up model isn't retried on every message.
+ */
+const resting = new Map<string, number>();
+function rest(model: string, e: unknown) {
+  const wait =
+    e instanceof ApiError && e.status === 429
+      ? (retryAfterMs(e) ?? 60_000)
+      : e instanceof ApiError && e.status === 404
+        ? 24 * 3600_000
+        : 30_000; // busy, timed out or unreachable
+  resting.set(model, Date.now() + wait);
+}
 
-  const generate = (model: string) => ai.models.generateContent({ model, contents, config });
+/** One full turn on one model: ask, run the tools it wants, repeat until it answers. */
+async function runTurn(ai: GoogleGenAI, model: string, history: ChatTurn[], audio: Audio | undefined, ctx: Ctx, system: string) {
+  ctx.proposals = [];
+  const contents = toContents(history, audio);
+  const config = { systemInstruction: system, tools: [{ functionDeclarations: TOOLS }] };
 
-  // The first model that answers handles the whole turn (switching mid-turn would lose Gemini's context)
-  let model: string | null = null;
-  let lastError: unknown;
   for (let step = 0; step < MAX_STEPS; step++) {
     let res;
-    if (!model) {
-      // Every model busy or over its per-minute limit: wait as Google asks (up to 15 s) and go round once more
-      for (let round = 0; round < 2 && !res; round++) {
-        let shortestWait = Infinity;
-        for (const candidate of MODELS) {
-          try {
-            res = await generate(candidate);
-            model = candidate;
-            break;
-          } catch (e) {
-            lastError = e;
-            if (!retryable(e)) throw new AssistantError("failed");
-            if (!isDailyLimit(e)) shortestWait = Math.min(shortestWait, retryAfterMs(e));
-          }
-        }
-        if (res || round > 0 || shortestWait > 15000) break;
-        await sleep(shortestWait + 300);
-      }
-    } else {
-      // Mid-turn: if the model is briefly over its limit, wait as Google asks (up to 15 s) and retry once
-      for (let attempt = 0; attempt < 2 && !res; attempt++) {
-        try {
-          res = await generate(model);
-        } catch (e) {
-          lastError = e;
-          if (!retryable(e) || isDailyLimit(e)) break;
-          const wait = retryAfterMs(e);
-          if (attempt > 0 || wait > 15000) break;
-          await sleep(wait + 300);
-        }
-      }
+    try {
+      res = await ai.models.generateContent({ model, contents, config });
+    } catch (e) {
+      // Briefly over the per-minute limit mid-turn: wait as asked (a few seconds) and retry once
+      const wait = retryAfterMs(e);
+      if (step === 0 || isDailyLimit(e) || wait === null || wait > 8000) throw e;
+      await sleep(wait + 300);
+      res = await ai.models.generateContent({ model, contents, config });
     }
-    if (!res) throw new AssistantError(isDailyLimit(lastError) ? "quota" : "busy");
 
     const calls = res.functionCalls ?? [];
-    if (!calls.length) return { reply: (res.text ?? "").trim(), proposals: ctx.proposals };
+    const said = (res.candidates?.[0]?.content?.parts ?? [])
+      .map((p) => (p.thought ? "" : (p.text ?? "")))
+      .join("")
+      .trim();
+    if (!calls.length) return { reply: said, proposals: ctx.proposals };
+
+    const results = await Promise.all(calls.map((c) => runTool(c, ctx)));
+    // Only cards were prepared and all went fine: the app shows them, no need for another request
+    if (calls.every((c) => c.name?.startsWith("propose_")) && results.every((r) => !("error" in r))) {
+      return { reply: said, proposals: ctx.proposals };
+    }
 
     // Keep the model's own turn as-is (it carries the context Gemini needs), then answer every call
     const modelTurn = res.candidates?.[0]?.content;
     if (modelTurn) contents.push(modelTurn);
-    const results = await Promise.all(calls.map((c) => runTool(c, ctx)));
     contents.push({
       role: "user",
       parts: calls.map((c, i) => ({ functionResponse: { id: c.id, name: c.name, response: results[i] } })),
     });
   }
   return { reply: "", proposals: ctx.proposals };
+}
+
+export async function runAssistant(history: ChatTurn[], base: Omit<Ctx, "proposals">, audio?: Audio) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new AssistantError("config");
+  // A slow model is skipped for the next one rather than keeping the shop waiting
+  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 20_000 } });
+  const ctx: Ctx = { ...base, proposals: [] };
+  const system = await systemPrompt(ctx);
+
+  // Any failure on a model (out of quota, busy, slow) restarts the whole turn on the next one
+  const ready = MODELS.filter((m) => (resting.get(m) ?? 0) <= Date.now());
+  let lastError: unknown;
+  for (const model of ready.length ? ready : MODELS) {
+    try {
+      return await runTurn(ai, model, history, audio, ctx, system);
+    } catch (e) {
+      lastError = e;
+      if (!retryable(e)) throw new AssistantError("failed");
+      rest(model, e);
+    }
+  }
+  const allOutForToday = MODELS.every((m) => (resting.get(m) ?? 0) - Date.now() > 3600_000);
+  throw new AssistantError(isDailyLimit(lastError) && allOutForToday ? "quota" : "busy");
 }

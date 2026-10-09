@@ -1447,3 +1447,29 @@ details.sale > summary::-webkit-details-marker {
     animation: none;
   }
 }
+
+/* recording bar (replaces the text box while recording) */
+.recording-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1.5px solid var(--khata);
+  border-radius: var(--r-btn);
+  background: #fdf3f3;
+  color: var(--khata-deep);
+  font-size: 14px;
+  font-weight: 600;
+}
+.recording-bar .mode-link {
+  margin-left: auto;
+  margin-top: 0;
+}
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--khata);
+  animation: fade 0.8s infinite alternate;
+}

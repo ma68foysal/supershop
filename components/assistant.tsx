@@ -4,42 +4,27 @@ import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from
 import { runProposal } from "@/app/actions";
 import type { ChatTurn, Proposal } from "@/lib/assistant/proposals";
 import { toBnDigits } from "@/lib/format";
+import { startRecording, type Recording } from "@/lib/wav-recorder";
 import { Spinner, useReportBusy } from "./busy";
 import { useI18n } from "./i18n";
 import Sheet from "./sheet";
 
 type CardState = { p: Proposal; status: "pending" | "done" | "cancelled"; result?: string };
+type Turn = { role: "user" | "model"; text: string; cards?: CardState[]; error?: boolean };
 
-/* Speech to text: the browser's own recognizer (free; best in Chrome on Android) */
-type Recognizer = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
-  onerror: ((e: { error: string }) => void) | null;
-  onend: (() => void) | null;
-};
-type RecognizerClass = new () => Recognizer;
-const recognizerClass = () =>
-  ((window as unknown as { SpeechRecognition?: RecognizerClass; webkitSpeechRecognition?: RecognizerClass })
-    .SpeechRecognition ??
-    (window as unknown as { webkitSpeechRecognition?: RecognizerClass }).webkitSpeechRecognition) ||
-  null;
+const MAX_SECONDS = 30;
 const noSubscribe = () => () => {};
+const micAvailable = () => Boolean(navigator.mediaDevices?.getUserMedia);
 
 /** Replies show as plain text: drop stray markdown emphasis, and use Bangla digits on Bangla screens. */
 const tidyReply = (text: string, lang: "bn" | "en") => {
   const plain = text.replace(/\*+/g, "").trim();
   return lang === "bn" ? toBnDigits(plain) : plain;
 };
-type Turn = { role: "user" | "model"; text: string; cards?: CardState[]; error?: boolean };
 
 /** Header button + chat window. The AI prepares changes as cards; nothing is saved until confirm. */
 export default function Assistant() {
-  const { t, lang } = useI18n();
+  const { t, f, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -47,16 +32,19 @@ export default function Assistant() {
   useReportBusy(thinking);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  // Latest turns for callbacks that outlive a render (the voice recognizer finishing)
+  // Voice: tap the mic to record, tap again to send the recording
+  const canRecord = useSyncExternalStore(noSubscribe, micAvailable, () => false);
+  const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [micNote, setMicNote] = useState<string | null>(null);
+  const recorder = useRef<{ stop(): Recording; cancel(): void } | null>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  // Latest turns for callbacks that run after a render (the recording timer finishing)
   const turnsRef = useRef(turns);
   useEffect(() => {
     turnsRef.current = turns;
   }, [turns]);
-
-  const canListen = useSyncExternalStore(noSubscribe, () => Boolean(recognizerClass()), () => false);
-  const [listening, setListening] = useState(false);
-  const [micNote, setMicNote] = useState<string | null>(null);
-  const recRef = useRef<Recognizer | null>(null);
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
@@ -74,7 +62,7 @@ export default function Assistant() {
         ].join("\n"),
       }));
 
-  async function send(text: string) {
+  async function send(text: string, audio?: Recording) {
     const msg = text.trim();
     if (!msg || thinking) return;
     const next: Turn[] = [...turnsRef.current, { role: "user", text: msg }];
@@ -85,14 +73,16 @@ export default function Assistant() {
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ history: history(next) }),
+        body: JSON.stringify({
+          history: history(next),
+          audio: audio ? { mimeType: audio.mimeType, data: audio.data } : undefined,
+        }),
       });
       const data = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
       if (!res.ok || !data) throw new Error(data?.error ?? t.aiFailed);
       const cards: CardState[] = (data.proposals as Proposal[]).map((p) => ({ p, status: "pending" }));
       setTurns((all) => [
         ...all,
-        // Strip stray markdown emphasis; replies are shown as plain text
         {
           role: "model",
           text: tidyReply(data.reply ?? "", lang) || (cards.length ? t.aiCheck : t.aiNoReply),
@@ -107,48 +97,44 @@ export default function Assistant() {
     }
   }
 
-  // Tap to speak; words appear in the box as you talk and are sent when you stop
-  function listen() {
-    if (listening) {
-      recRef.current?.stop();
-      return;
-    }
-    const Rec = recognizerClass();
-    if (!Rec) return;
-    const rec = new Rec();
-    rec.lang = lang === "bn" ? "bn-BD" : "en-IN";
-    rec.interimResults = true;
-    rec.continuous = false;
-    let heard = "";
-    rec.onresult = (e) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) heard += r[0].transcript;
-        else interim += r[0].transcript;
-      }
-      setInput(heard + interim);
-    };
-    rec.onerror = (e) => {
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") setMicNote(t.aiMicDenied);
-      else if (e.error === "no-speech") setMicNote(t.aiMicNoSpeech);
-    };
-    rec.onend = () => {
-      setListening(false);
-      recRef.current = null;
-      if (heard.trim()) send(heard);
-    };
-    recRef.current = rec;
-    setMicNote(null);
-    setInput("");
-    setListening(true);
-    rec.start();
+  function stopRecording(sendIt: boolean) {
+    clearInterval(timer.current);
+    setRecording(false);
+    const rec = recorder.current;
+    recorder.current = null;
+    if (!rec) return;
+    if (!sendIt) return rec.cancel();
+    const audio = rec.stop();
+    if (audio.seconds < 0.6) return setMicNote(t.aiTooShort);
+    send(t.aiVoiceTurn, audio);
   }
 
+  async function toggleRecording() {
+    if (recording) return stopRecording(true);
+    setMicNote(null);
+    try {
+      recorder.current = await startRecording();
+    } catch (e) {
+      const name = (e as Error).name;
+      setMicNote(name === "NotAllowedError" || name === "SecurityError" ? t.aiMicDenied : t.aiNoMic);
+      return;
+    }
+    setSeconds(0);
+    setRecording(true);
+    let ticks = 0;
+    timer.current = setInterval(() => {
+      ticks += 1;
+      setSeconds(ticks);
+      if (ticks >= MAX_SECONDS) stopRecording(true);
+    }, 1000);
+  }
+
+  // Closing the window throws away an unfinished recording
   const close = () => {
-    recRef.current?.abort();
+    stopRecording(false);
     setOpen(false);
   };
+  useEffect(() => () => recorder.current?.cancel(), []);
 
   const setCard = (turn: number, card: number, patch: Partial<CardState>) =>
     setTurns((all) =>
@@ -217,36 +203,58 @@ export default function Assistant() {
               send(input);
             }}
           >
-            <input
-              className="input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={listening ? t.aiListening : canListen ? t.aiPlaceholderMic : t.aiPlaceholder}
-              aria-label={t.aiPlaceholder}
-              enterKeyHint="send"
-            />
-            {canListen && (
+            {recording ? (
+              <div className="recording-bar" role="status">
+                <span className="rec-dot" aria-hidden="true" />
+                {t.aiRecording(f.digits(`0:${String(seconds).padStart(2, "0")}`))}
+                <button type="button" className="mode-link" onClick={() => stopRecording(false)}>
+                  {t.aiDismiss}
+                </button>
+              </div>
+            ) : (
+              <input
+                className="input"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={canRecord ? t.aiPlaceholderMic : t.aiPlaceholder}
+                aria-label={t.aiPlaceholder}
+                enterKeyHint="send"
+              />
+            )}
+            {canRecord && (
               <button
                 type="button"
-                className={"mic-btn" + (listening ? " on" : "")}
-                onClick={listen}
+                className={"mic-btn" + (recording ? " on" : "")}
+                onClick={toggleRecording}
                 disabled={thinking}
-                aria-pressed={listening}
-                aria-label={listening ? t.aiStopListening : t.aiSpeak}
+                aria-pressed={recording}
+                aria-label={recording ? t.aiStopListening : t.aiSpeak}
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="9" y="3" width="6" height="11" rx="3" />
-                  <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                {recording ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M4 12l16-8-6 16-2.5-6.5z" />
+                  </svg>
+                ) : (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                  </svg>
+                )}
+              </button>
+            )}
+            {!recording && (
+              <button className="send-btn" disabled={!input.trim() || thinking} aria-label={t.aiSend}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <path d="M4 12l16-8-6 16-2.5-6.5z" />
                 </svg>
               </button>
             )}
-            <button className="send-btn" disabled={!input.trim() || thinking || listening} aria-label={t.aiSend}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M4 12l16-8-6 16-2.5-6.5z" />
-              </svg>
-            </button>
           </form>
-          {micNote && <p className="sub" style={{ marginTop: 6 }}>{micNote}</p>}
+          {micNote && (
+            <p className="sub" style={{ marginTop: 6 }}>
+              {micNote}
+            </p>
+          )}
         </Sheet>
       )}
     </>

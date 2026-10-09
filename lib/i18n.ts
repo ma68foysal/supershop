@@ -355,12 +355,15 @@ const en = {
   aiConfig: "The assistant isn't set up yet (GEMINI_API_KEY is missing).",
   aiFailed: "Something went wrong with the assistant. Try again.",
   aiOffline: "No internet connection. Check it and try again.",
-  aiPlaceholderMic: "Type, or tap the mic and speak",
+  aiPlaceholderMic: "Type, or tap the mic to speak",
   aiSpeak: "Speak",
-  aiStopListening: "Stop listening",
-  aiListening: "Listening… speak now",
+  aiStopListening: "Stop and send",
+  aiRecording: (time: string) => `Recording ${time}… tap the button to send`,
+  aiVoiceTurn: "🎤 Voice message",
+  aiTooShort: "That was too short. Tap the mic, speak, then tap again to send.",
+  aiTooLong: "The recording is too long. Keep it under 30 seconds.",
+  aiNoMic: "No microphone was found on this device.",
   aiMicDenied: "Allow the microphone in your browser to speak to the assistant.",
-  aiMicNoSpeech: "Didn't hear anything. Tap the mic and try again.",
 };
 
 export type Dict = typeof en;
@@ -702,10 +705,13 @@ const bn: Dict = {
   aiOffline: "ইন্টারনেট সংযোগ নেই। দেখে আবার চেষ্টা করুন।",
   aiPlaceholderMic: "লিখুন, বা মাইক চেপে বলুন",
   aiSpeak: "কথা বলুন",
-  aiStopListening: "শোনা বন্ধ করুন",
-  aiListening: "শুনছি… বলুন",
+  aiStopListening: "থামিয়ে পাঠান",
+  aiRecording: (time) => `রেকর্ড হচ্ছে ${time}… পাঠাতে বোতাম চাপুন`,
+  aiVoiceTurn: "🎤 ভয়েস মেসেজ",
+  aiTooShort: "খুব ছোট হয়েছে। মাইক চেপে কথা বলুন, তারপর আবার চেপে পাঠান।",
+  aiTooLong: "রেকর্ডিং অনেক লম্বা। ৩০ সেকেন্ডের মধ্যে বলুন।",
+  aiNoMic: "এই ফোনে কোনো মাইক্রোফোন পাওয়া যায়নি।",
   aiMicDenied: "কথা বলতে ব্রাউজারে মাইক্রোফোনের অনুমতি দিন।",
-  aiMicNoSpeech: "কিছু শুনতে পাইনি। মাইক চেপে আবার বলুন।",
 };
 
 export const DICTS: Record<Lang, Dict> = { en, bn };

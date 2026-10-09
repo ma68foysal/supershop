@@ -168,6 +168,12 @@ function QuickSale({
 }
 
 /* ---------------- item by item ---------------- */
+/** A cart line is either a quantity (2 pcs, 0.5 kg) or a taka amount ("৳10 of sugar"). */
+type Line = { qty: number } | { amount: number };
+const QUICK_AMOUNTS = [5, 10, 20, 30, 50, 100];
+const lineTotal = (p: Product, l: Line) => ("amount" in l ? l.amount : Math.round(p.sell_price * l.qty * 100) / 100);
+const lineQty = (p: Product, l: Line) => ("amount" in l ? (p.sell_price > 0 ? l.amount / p.sell_price : 0) : l.qty);
+
 function ItemSale({
   products,
   disabled,
@@ -180,7 +186,7 @@ function ItemSale({
   onSave: (p: SalePayload, after: () => void) => void;
 }) {
   const { t, f, lang } = useI18n();
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<Record<string, Line>>({});
   const [q, setQ] = useState("");
   const hasFav = products.some((p) => p.is_favorite);
   // Category filter; null = the default (Favourites if any, else All)
@@ -188,6 +194,7 @@ function ItemSale({
   const current = cat ?? (hasFav ? FAV : ALL);
   const [open, setOpen] = useState(false);
   const [discount, setDiscount] = useState("");
+  const [picking, setPicking] = useState<Product | null>(null);
 
   const cats = useMemo(
     () => [
@@ -213,20 +220,25 @@ function ItemSale({
 
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const lines = Object.entries(cart)
-    .map(([id, qty]) => ({ p: byId.get(id)!, qty }))
+    .map(([id, line]) => ({ p: byId.get(id)!, line }))
     .filter((l) => l.p);
-  const subtotal = lines.reduce((a, l) => a + Math.round(l.p.sell_price * l.qty * 100) / 100, 0);
+  const subtotal = lines.reduce((a, l) => a + lineTotal(l.p, l.line), 0);
   const disc = Math.min(Number(discount || 0), subtotal);
   const total = subtotal - disc;
 
-  const setQty = (id: string, qty: number) =>
+  const setLine = (id: string, line: Line | null) =>
     setCart((c) => {
       const n = { ...c };
-      if (!(qty > 0)) delete n[id];
-      else n[id] = Math.round(qty * 1000) / 1000;
+      if (!line) delete n[id];
+      else n[id] = line;
       return n;
     });
-  const add = (p: Product) => setQty(p.id, (cart[p.id] ?? 0) + qtyStep(p.unit));
+  const setQty = (id: string, qty: number) => setLine(id, qty > 0 ? { qty: Math.round(qty * 1000) / 1000 } : null);
+  const setAmount = (id: string, amount: number) => setLine(id, amount > 0 ? { amount } : null);
+  const add = (p: Product) => {
+    const l = cart[p.id];
+    setQty(p.id, (l && "qty" in l ? l.qty : 0) + qtyStep(p.unit));
+  };
   // Bangla screens lead with the Bangla name when there is one
   const names = (p: Product) =>
     lang === "bn" && p.name_bn
@@ -265,7 +277,7 @@ function ItemSale({
       )}
       <ul className="rows" style={{ marginTop: q ? 12 : 0 }}>
         {list.map((p) => {
-          const n = cart[p.id];
+          const l = cart[p.id];
           return (
             <li className="row" key={p.id}>
               <div className="row-main">
@@ -276,11 +288,22 @@ function ItemSale({
                 {f.money(p.sell_price)}
                 <small>{t.perUnit(f.unit(p.unit))}</small>
               </div>
-              <button className={"add" + (n ? " in" : "")} onClick={() => add(p)} aria-label={t.addItem(p.name)}>
+              <button
+                className={"add amt" + (l && "amount" in l ? " in" : "")}
+                onClick={() => setPicking(p)}
+                aria-label={t.byAmountAria(p.name)}
+              >
+                ৳{l && "amount" in l ? <span className="count">{f.num(l.amount)}</span> : null}
+              </button>
+              <button
+                className={"add" + (l && "qty" in l ? " in" : "")}
+                onClick={() => add(p)}
+                aria-label={t.addItem(p.name)}
+              >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
-                {n ? <span className="count">{f.num(n)}</span> : null}
+                {l && "qty" in l ? <span className="count">{f.num(l.qty)}</span> : null}
               </button>
             </li>
           );
@@ -305,37 +328,81 @@ function ItemSale({
         </div>
       )}
 
+      {picking && (
+        <AmountPicker
+          product={picking}
+          name={names(picking).main}
+          onPick={(amount) => {
+            setAmount(picking.id, amount);
+            setPicking(null);
+          }}
+          onClose={() => setPicking(null)}
+        />
+      )}
+
       {open && lines.length > 0 && (
         <Sheet title={t.cart} onClose={() => setOpen(false)}>
           <ul className="rows" style={{ marginTop: 10 }}>
-            {lines.map(({ p, qty }) => (
+            {lines.map(({ p, line }) => (
               <li className="row" key={p.id}>
                 <div className="row-main">
                   <div className="row-name">{names(p).main}</div>
                   <div className="row-meta">
-                    {f.money(p.sell_price)} {t.perUnit(f.unit(p.unit))}
+                    {"amount" in line ? (
+                      <>≈ {f.qty(lineQty(p, line), p.unit)}</>
+                    ) : (
+                      <>
+                        {f.money(p.sell_price)} {t.perUnit(f.unit(p.unit))}
+                      </>
+                    )}
                   </div>
-                </div>
-                <div className="stepper">
-                  <button aria-label={t.less(p.name)} onClick={() => setQty(p.id, qty - qtyStep(p.unit))}>
-                    −
-                  </button>
-                  <input
-                    inputMode="decimal"
-                    aria-label={t.qtyOf(p.name, f.unit(p.unit))}
-                    value={qty}
-                    onChange={(e) => {
-                      const v = toAsciiDigits(e.target.value).replace(/[^\d.]/g, "");
-                      setCart((c) => ({ ...c, [p.id]: v === "" ? 0 : Number(v) }));
-                    }}
-                    onBlur={() => setQty(p.id, qty)}
-                  />
-                  <button aria-label={t.more(p.name)} onClick={() => setQty(p.id, qty + qtyStep(p.unit))}>
-                    +
+                  <button
+                    className="mode-link"
+                    onClick={() =>
+                      "amount" in line
+                        ? setQty(p.id, qtyStep(p.unit))
+                        : setAmount(p.id, Math.round(lineTotal(p, line)) || 10)
+                    }
+                  >
+                    {"amount" in line ? t.switchToQty : t.switchToAmount}
                   </button>
                 </div>
-                <div className="row-price num" style={{ minWidth: 70 }}>
-                  {f.money(Math.round(p.sell_price * qty * 100) / 100)}
+                {"amount" in line ? (
+                  <div className="stepper amount-box">
+                    <span aria-hidden="true">৳</span>
+                    <input
+                      inputMode="decimal"
+                      aria-label={t.byAmountAria(p.name)}
+                      value={line.amount || ""}
+                      onChange={(e) => {
+                        const v = toAsciiDigits(e.target.value).replace(/[^\d.]/g, "");
+                        setCart((c) => ({ ...c, [p.id]: { amount: v === "" ? 0 : Number(v) } }));
+                      }}
+                      onBlur={() => setAmount(p.id, line.amount)}
+                    />
+                  </div>
+                ) : (
+                  <div className="stepper">
+                    <button aria-label={t.less(p.name)} onClick={() => setQty(p.id, line.qty - qtyStep(p.unit))}>
+                      −
+                    </button>
+                    <input
+                      inputMode="decimal"
+                      aria-label={t.qtyOf(p.name, f.unit(p.unit))}
+                      value={line.qty}
+                      onChange={(e) => {
+                        const v = toAsciiDigits(e.target.value).replace(/[^\d.]/g, "");
+                        setCart((c) => ({ ...c, [p.id]: { qty: v === "" ? 0 : Number(v) } }));
+                      }}
+                      onBlur={() => setQty(p.id, line.qty)}
+                    />
+                    <button aria-label={t.more(p.name)} onClick={() => setQty(p.id, line.qty + qtyStep(p.unit))}>
+                      +
+                    </button>
+                  </div>
+                )}
+                <div className="row-price num" style={{ minWidth: 64 }}>
+                  {f.money(lineTotal(p, line))}
                 </div>
               </li>
             ))}
@@ -367,12 +434,14 @@ function ItemSale({
           </div>
           <button
             className="primary"
-            disabled={disabled || lines.some((l) => !(l.qty > 0))}
+            disabled={disabled || lines.some((l) => !(lineTotal(l.p, l.line) > 0))}
             onClick={() =>
               onSave(
                 {
                   kind: "items",
-                  items: lines.map((l) => ({ product_id: l.p.id, qty: l.qty })),
+                  items: lines.map(({ p, line }) =>
+                    "amount" in line ? { product_id: p.id, amount: line.amount } : { product_id: p.id, qty: line.qty },
+                  ),
                   discount: disc,
                 },
                 () => {
@@ -405,5 +474,54 @@ function ItemSale({
         </Sheet>
       )}
     </>
+  );
+}
+
+/** "How much sugar?": quick taka amounts, or type any amount. */
+function AmountPicker({
+  product: p,
+  name,
+  onPick,
+  onClose,
+}: {
+  product: Product;
+  name: string;
+  onPick: (amount: number) => void;
+  onClose: () => void;
+}) {
+  const { t, f } = useI18n();
+  const [custom, setCustom] = useState("");
+  const value = Number(custom || 0);
+  return (
+    <Sheet title={t.sellByAmountTitle(name)} onClose={onClose}>
+      <p className="sub">
+        {f.money(p.sell_price)} {t.perUnit(f.unit(p.unit))}
+      </p>
+      <div className="amount-chips">
+        {QUICK_AMOUNTS.map((a) => (
+          <button key={a} className="amount-chip" onClick={() => onPick(a)}>
+            <span className="num">{f.money(a)}</span>
+            {p.sell_price > 0 && <small>≈ {f.qty(a / p.sell_price, p.unit)}</small>}
+          </button>
+        ))}
+      </div>
+      <label className="field">
+        <span>{t.otherAmount}</span>
+        <input
+          inputMode="decimal"
+          value={custom}
+          onChange={(e) => setCustom(toAsciiDigits(e.target.value).replace(/[^\d.]/g, ""))}
+          placeholder={f.digits(15)}
+        />
+      </label>
+      {value > 0 && p.sell_price > 0 && (
+        <p className="sub" style={{ marginTop: 6 }}>
+          ≈ {f.qty(value / p.sell_price, p.unit)}
+        </p>
+      )}
+      <button className="primary" disabled={!(value > 0)} onClick={() => onPick(value)}>
+        {value > 0 ? t.addAmount(f.money(value)) : t.addToCart}
+      </button>
+    </Sheet>
   );
 }

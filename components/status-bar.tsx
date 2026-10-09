@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { closeDay, openDay } from "@/app/actions";
 import { toAsciiDigits } from "@/lib/format";
 import type { BusinessDay, Settings } from "@/lib/types";
+import Assistant from "./assistant";
 import { Spinner, useReportBusy } from "./busy";
 import { useI18n } from "./i18n";
 import Sheet from "./sheet";
@@ -44,12 +45,15 @@ export default function StatusBar({
     <header className={"status" + (isOpen ? "" : " closed")}>
       <div className="status-top">
         <div className="shop-name">{settings.shop_name}</div>
-        <Link href="/settings" className="icon-btn" aria-label={t.settingsAria}>
+        <div className="status-icons">
+          <Assistant />
+          <Link href="/settings" className="icon-btn" aria-label={t.settingsAria}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
           </svg>
-        </Link>
+          </Link>
+        </div>
       </div>
       <div className="status-line">
         <div className="status-text">

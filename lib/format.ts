@@ -21,7 +21,11 @@ const UNIT_NAMES: Record<Lang, Record<Unit, string>> = {
 };
 export const unitLabel = (unit: Unit, lang: Lang = "en") => UNIT_NAMES[lang][unit];
 
-export const qtyLabel = (qty: number, unit: Unit, lang: Lang = "en") => {
+export const qtyLabel = (qty: number, unit: Unit, lang: Lang = "en"): string => {
+  // Under a kilo or litre reads better as grams / ml: 0.077 kg → 77 g
+  if ((unit === "kg" || unit === "L") && qty > 0 && qty < 1) {
+    return qtyLabel(Math.round(qty * 1000), unit === "kg" ? "g" : "ml", lang);
+  }
   const q = num(qty, lang);
   if (unit === "pcs") return q;
   if (lang === "bn") return `${q} ${UNIT_NAMES.bn[unit]}`;

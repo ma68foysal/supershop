@@ -7,6 +7,7 @@ import { toAsciiDigits, type Lang } from "@/lib/format";
 import { LANG_COOKIE, translateDbError, type Dict } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n-server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import type { Proposal } from "@/lib/assistant/proposals";
 import type { ActionResult, Unit } from "@/lib/types";
 
 /** Staff sign in with a short username; it maps to this hidden email domain. */
@@ -68,7 +69,13 @@ export async function closeDay(countedCash: number | null): Promise<ActionResult
 // ---------- sales ----------
 export type SalePayload =
   | { kind: "quick"; total: number; note?: string }
-  | { kind: "items"; items: { product_id: string; qty: number }[]; discount?: number; note?: string };
+  | {
+      kind: "items";
+      /** qty (2 pcs, 0.5 kg) or amount in taka ("৳10 of sugar") */
+      items: ({ product_id: string; qty: number } | { product_id: string; amount: number })[];
+      discount?: number;
+      note?: string;
+    };
 
 export async function createSale(payload: SalePayload): Promise<ActionResult & { total?: number; receiptNo?: number }> {
   const { t } = await getI18n();
@@ -267,4 +274,60 @@ export async function setStaffActive(id: string, active: boolean): Promise<Actio
   const supabase = await createClient();
   const { error } = await supabase.from("staff").update({ active }).eq("id", id);
   return error ? fail(t, error) : done(active ? t.loginOn : t.loginOff);
+}
+
+// ---------- assistant: carry out a confirmed card ----------
+/** Runs a change the assistant prepared, after the person tapped confirm. Same permissions as the screens. */
+export async function runProposal(p: Proposal): Promise<ActionResult> {
+  const { t, f } = await getI18n();
+  const supabase = await createClient();
+  switch (p.kind) {
+    case "quick_sale":
+    case "item_sale": {
+      const payload =
+        p.kind === "quick_sale"
+          ? { kind: "quick", total: p.total, note: p.note }
+          : {
+              kind: "items",
+              items: p.lines.map((l) =>
+                l.amount ? { product_id: l.product_id, amount: l.amount } : { product_id: l.product_id, qty: l.qty },
+              ),
+              discount: p.discount,
+              note: p.note,
+            };
+      const { data, error } = await supabase.rpc("create_sale", { payload });
+      if (error) return fail(t, error);
+      return done(t.saleSaved(f.digits(data.receipt_no), f.money(Number(data.total))));
+    }
+    case "update_product": {
+      const { error, count } = await supabase
+        .from("products")
+        .update({ ...p.after, updated_at: new Date().toISOString() }, { count: "exact" })
+        .eq("id", p.product_id);
+      if (error?.code === "23505") return { error: t.codeUsed(p.after.short_code ?? "") };
+      if (error) return fail(t, error);
+      if (!count) return { error: t.genericError };
+      return done(t.productSaved(p.name));
+    }
+    case "new_product": {
+      const { error } = await supabase.from("products").insert(p.product);
+      return error ? fail(t, error) : done(t.productSaved(p.product.name_bn || p.product.name));
+    }
+    case "new_sr": {
+      const { error } = await supabase.from("srs").insert(p.sr);
+      return error ? fail(t, error) : done(t.srSaved(p.sr.name));
+    }
+    case "open_shop": {
+      const { error } = await supabase.rpc("open_day", { p_opening_cash: 0 });
+      return error ? fail(t, error) : done(t.shopOpened);
+    }
+    case "close_shop": {
+      const { error } = await supabase.rpc("close_day", { p_counted_cash: null });
+      return error ? fail(t, error) : done(t.shopClosedReport);
+    }
+    case "void_sale": {
+      const { error } = await supabase.rpc("void_sale", { p_sale: p.sale_id, p_reason: "" });
+      return error ? fail(t, error) : done(t.saleVoided);
+    }
+  }
 }

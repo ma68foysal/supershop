@@ -23,7 +23,11 @@
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...        # server only, used to create staff logins
+GEMINI_API_KEY=...                       # server only, for the in-app assistant (free key from aistudio.google.com)
 ```
+Optional: `GEMINI_MODELS=gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3.8-flash` changes which
+Gemini models the assistant tries, in order. Without `GEMINI_API_KEY` the app works; only the assistant
+says it isn't set up.
 Supabase → **Project Settings → API Keys** has them.
 
 ## 4. Run
@@ -35,7 +39,7 @@ First steps in the app: Settings (shop name, address, hours) → Products → Op
 
 ## 5. Deploy to Vercel
 1. Push the repo to GitHub, import it in Vercel.
-2. Add the same three variables in **Project → Settings → Environment Variables**.
+2. Add the same variables (Supabase keys and `GEMINI_API_KEY`) in **Project → Settings → Environment Variables**.
 3. Deploy, then open the site on each phone and use **Add to Home screen**.
 
 ## Staff logins

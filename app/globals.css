@@ -1630,3 +1630,20 @@ details.sale > summary::-webkit-details-marker {
   border-color: var(--khata);
   background: #fdf3f3;
 }
+
+.scan-thumb {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--sheet);
+}
+.scan-thumb.empty {
+  background: repeating-linear-gradient(45deg, #eef2f6 0 6px, #f7f9fb 6px 12px);
+}
+.tag.spoken {
+  background: #e2f1e6;
+  color: var(--leaf);
+}

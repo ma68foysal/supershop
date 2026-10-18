@@ -402,8 +402,9 @@ const en = {
   // add products from a shelf video or photos
   scanTitle: "Add products from a video or photos",
   scanHint: "Film your shelves; the assistant lists the products for you",
-  scanIntro: "Film the shelves slowly or take a few photos. The assistant reads the packs and lists the products; you check them before anything is added.",
+  scanIntro: "Film the shelves slowly while saying each product's name and price, or take a few photos. The assistant reads the packs and listens to you, then lists the products; you check them before anything is added.",
   scanTips: [
+    "Say each product's name and price while filming: \"This is Lux, 60 taka\"",
     "Good light, 1 to 2 arm's lengths from the shelf",
     "Move slowly so each label is seen for a second or two",
     "One or two shelves per video, under 2 minutes",
@@ -411,6 +412,10 @@ const en = {
   pickVideo: "Choose or record a video",
   pickPhotos: "Choose photos",
   scanPreparing: "Getting the pictures ready…",
+  scanListening: "Listening to what you said…",
+  scanPictures: "Cutting out the product pictures…",
+  priceSpoken: "Price you said",
+  pricePack: "Price on pack",
   scanFrames: (d: string, n: string) => `Taking pictures from the video ${d}/${n}`,
   scanReading: (i: string, n: string) => `Reading the products… ${i}/${n}`,
   scanFound: (n: string) => `${n} products found. Check them, fill in missing prices, then add.`,
@@ -807,8 +812,9 @@ const bn: Dict = {
 
   scanTitle: "ভিডিও বা ছবি থেকে পণ্য যোগ",
   scanHint: "তাকের ভিডিও করুন, সহকারী পণ্যের তালিকা বানিয়ে দেবে",
-  scanIntro: "তাকগুলো আস্তে আস্তে ভিডিও করুন বা কয়েকটা ছবি তুলুন। সহকারী মোড়ক পড়ে পণ্যের তালিকা বানাবে; যোগ করার আগে আপনি দেখে নেবেন।",
+  scanIntro: "তাকগুলো আস্তে আস্তে ভিডিও করুন আর পণ্যের নাম-দাম মুখে বলুন, বা কয়েকটা ছবি তুলুন। সহকারী মোড়ক পড়ে আর আপনার কথা শুনে পণ্যের তালিকা বানাবে; যোগ করার আগে আপনি দেখে নেবেন।",
   scanTips: [
+    "ভিডিও করার সময় প্রতিটা পণ্যের নাম আর দাম মুখে বলুন: \"এটা লাক্স, ৬০ টাকা\"",
     "ভালো আলোতে, তাক থেকে ১–২ হাত দূরে থাকুন",
     "আস্তে আস্তে সরান, যাতে প্রতিটা লেবেল ১–২ সেকেন্ড দেখা যায়",
     "একটা ভিডিওতে এক-দুইটা তাক, ২ মিনিটের মধ্যে",
@@ -816,6 +822,10 @@ const bn: Dict = {
   pickVideo: "ভিডিও বেছে নিন বা রেকর্ড করুন",
   pickPhotos: "ছবি বেছে নিন",
   scanPreparing: "ছবি তৈরি হচ্ছে…",
+  scanListening: "আপনার কথা শোনা হচ্ছে…",
+  scanPictures: "পণ্যের ছবি কাটা হচ্ছে…",
+  priceSpoken: "বলা দাম",
+  pricePack: "মোড়কের দাম",
   scanFrames: (d, n) => `ভিডিও থেকে ছবি নেওয়া হচ্ছে ${d}/${n}`,
   scanReading: (i, n) => `পণ্য পড়া হচ্ছে… ${i}/${n}`,
   scanFound: (n) => `${n}টি পণ্য পাওয়া গেছে। দেখে নিন, দাম না থাকলে লিখুন, তারপর যোগ করুন।`,

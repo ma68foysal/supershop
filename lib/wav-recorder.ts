@@ -63,7 +63,7 @@ function downsample(input: Float32Array, from: number, to: number) {
   return out;
 }
 
-function encodeWav(samples: Float32Array, rate: number) {
+export function encodeWav(samples: Float32Array, rate: number) {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
   const v = new DataView(buffer);
   const text = (offset: number, s: string) => [...s].forEach((ch, i) => v.setUint8(offset + i, ch.charCodeAt(0)));
@@ -87,7 +87,7 @@ function encodeWav(samples: Float32Array, rate: number) {
   return new Uint8Array(buffer);
 }
 
-function toBase64(bytes: Uint8Array) {
+export function toBase64(bytes: Uint8Array) {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));

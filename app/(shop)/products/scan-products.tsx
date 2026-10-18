@@ -2,12 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { addProducts } from "@/app/actions";
-import type { ScannedProduct } from "@/lib/assistant/scan";
+import type { ScannedProduct, SpokenNote } from "@/lib/assistant/scan";
 import { Spinner, useReportBusy } from "@/components/busy";
 import { useI18n } from "@/components/i18n";
 import Sheet from "@/components/sheet";
 import { useToast } from "@/components/toast";
-import { photoFrames, videoFrames } from "@/lib/frames";
+import { cropThumb, photoFrames, videoAudio, videoFrames, type Frame } from "@/lib/frames";
 import { toAsciiDigits } from "@/lib/format";
 import { normalize } from "@/lib/search";
 import { UNITS, type Product, type Unit } from "@/lib/types";
@@ -23,8 +23,13 @@ type Row = {
   category: string;
   unit: Unit;
   price: string;
+  priceSource: "spoken" | "pack" | null;
   unsure: boolean;
+  thumb: string | null;
 };
+
+/** A found product, plus the picture (index across the whole video) it was seen in. */
+type Found = ScannedProduct & { at: number | null };
 
 /** Same product as one already in the shop? Compares spelling-insensitive names. */
 function alreadyIn(existing: Product[], p: { name: string; name_bn: string }) {
@@ -48,24 +53,50 @@ export default function ScanProducts({ existing, onClose }: { existing: Product[
   const [saving, startSaving] = useTransition();
   useReportBusy(phase === "reading" || saving);
 
-  async function read(frames: string[]) {
-    const found = new Map<string, ScannedProduct>();
+  async function post(body: object) {
+    const res = await fetch("/api/products/scan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
+    if (!res.ok || !data) throw new Error(data?.error ?? t.aiFailed);
+    return data;
+  }
+
+  /** What was said while filming ("এটা লাক্স, ৬০ টাকা"), with the second it was said. */
+  async function listen(file: File): Promise<SpokenNote[]> {
+    setProgress(t.scanListening);
+    const pieces = await videoAudio(file);
+    const notes: SpokenNote[] = [];
+    for (const piece of pieces) notes.push(...((await post({ audio: piece.data, offset: piece.offset })).notes ?? []));
+    return notes;
+  }
+
+  async function read(frames: Frame[], notes: SpokenNote[]) {
+    const found = new Map<string, Found>();
     const batches = Math.ceil(frames.length / PER_REQUEST);
     for (let i = 0; i < batches; i++) {
       setProgress(t.scanReading(f.num(i + 1), f.num(batches)));
-      const res = await fetch("/api/products/scan", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ images: frames.slice(i * PER_REQUEST, (i + 1) * PER_REQUEST) }),
-      });
-      const data = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
-      if (!res.ok || !data) throw new Error(data?.error ?? t.aiFailed);
-      // The same product seen in several batches is kept once; a price found later fills a gap
+      const batch = frames.slice(i * PER_REQUEST, (i + 1) * PER_REQUEST);
+      const data = await post({ images: batch.map((x) => x.data), times: batch.map((x) => x.at), notes });
       for (const p of data.products as ScannedProduct[]) {
+        // Frame numbers come back per batch; make them count across the whole video
+        const item: Found = { ...p, frame: p.frame === null ? null : i * PER_REQUEST + p.frame, at: null };
         const key = normalize(p.name);
         const seen = found.get(key);
-        if (!seen) found.set(key, p);
-        else if (seen.price === null && p.price !== null) seen.price = p.price;
+        if (!seen) found.set(key, item);
+        else {
+          // Seen again in a later batch: a spoken price beats a printed one, and fill gaps
+          if (item.price !== null && (seen.price === null || (item.price_source === "spoken" && seen.price_source !== "spoken"))) {
+            seen.price = item.price;
+            seen.price_source = item.price_source;
+          }
+          if (seen.frame === null && item.frame !== null) {
+            seen.frame = item.frame;
+            seen.box = item.box;
+          }
+        }
       }
     }
     return [...found.values()];
@@ -81,12 +112,17 @@ export default function ScanProducts({ existing, onClose }: { existing: Product[
         kind === "video"
           ? await videoFrames(files[0], (d, n) => setProgress(t.scanFrames(f.num(d), f.num(n))))
           : await photoFrames([...files]);
-      const products = await read(frames);
+      const notes = kind === "video" ? await listen(files[0]) : [];
+      const products = await read(frames, notes);
       if (!products.length) {
         setError(t.scanNone);
         setPhase("pick");
         return;
       }
+      setProgress(t.scanPictures);
+      const thumbs = await Promise.all(
+        products.map((p) => (p.frame !== null && frames[p.frame] ? cropThumb(frames[p.frame].data, p.box).catch(() => null) : null)),
+      );
       setRows(
         products.map((p, i) => {
           const exists = alreadyIn(existing, p);
@@ -99,7 +135,9 @@ export default function ScanProducts({ existing, onClose }: { existing: Product[
             category: p.category,
             unit: p.unit,
             price: p.price === null ? "" : String(p.price),
+            priceSource: p.price_source,
             unsure: p.confidence === "low",
+            thumb: thumbs[i],
           };
         }),
       );
@@ -176,6 +214,12 @@ export default function ScanProducts({ existing, onClose }: { existing: Product[
                   onChange={(e) => update(r.key, { checked: e.target.checked })}
                   aria-label={r.name}
                 />
+                {r.thumb ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="scan-thumb" src={r.thumb} alt="" />
+                ) : (
+                  <div className="scan-thumb empty" aria-hidden="true" />
+                )}
                 <div className="scan-fields">
                   <input
                     className="input"
@@ -204,10 +248,14 @@ export default function ScanProducts({ existing, onClose }: { existing: Product[
                       value={r.price}
                       placeholder={t.fSell}
                       aria-label={t.fSell}
-                      onChange={(e) => update(r.key, { price: toAsciiDigits(e.target.value).replace(/[^\d.]/g, "") })}
+                      onChange={(e) =>
+                        update(r.key, { price: toAsciiDigits(e.target.value).replace(/[^\d.]/g, ""), priceSource: null })
+                      }
                     />
                   </div>
                   <div>
+                    {r.priceSource === "spoken" && <span className="tag spoken">{t.priceSpoken}</span>}
+                    {r.priceSource === "pack" && <span className="tag">{t.pricePack}</span>}
                     {r.exists && <span className="tag">{t.alreadyInShop}</span>}
                     {r.unsure && <span className="tag void">{t.unsure}</span>}
                     {r.category && <span className="tag">{r.category}</span>}

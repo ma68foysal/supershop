@@ -8,7 +8,7 @@ import { LANG_COOKIE, translateDbError, type Dict } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n-server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import type { Proposal } from "@/lib/assistant/proposals";
-import type { ActionResult, Unit } from "@/lib/types";
+import { UNITS, type ActionResult, type Unit } from "@/lib/types";
 
 /** Staff sign in with a short username; it maps to this hidden email domain. */
 const STAFF_DOMAIN = "staff.dokan.local";
@@ -178,6 +178,28 @@ export async function deleteProduct(id: string, name: string): Promise<ActionRes
   if (error) return fail(t, error);
   if (!count) return { error: t.ownerOnlyProducts };
   return done(t.productDeleted(name));
+}
+
+/** Products found by the shelf scan, added together after the person checked them. */
+export type NewProduct = { name: string; name_bn: string | null; category: string | null; unit: Unit; sell_price: number };
+
+export async function addProducts(rows: NewProduct[]): Promise<ActionResult> {
+  const { t, f } = await getI18n();
+  const clean = rows
+    .map((r) => ({
+      name: String(r.name ?? "").trim(),
+      name_bn: r.name_bn ? String(r.name_bn).trim() || null : null,
+      category: r.category ? String(r.category).trim() || null : null,
+      unit: UNITS.includes(r.unit) ? r.unit : ("pcs" as Unit),
+      sell_price: Number(r.sell_price),
+      stock_qty: 0,
+    }))
+    .filter((r) => r.name);
+  if (!clean.length) return { error: t.needProductName };
+  if (clean.some((r) => !Number.isFinite(r.sell_price) || r.sell_price < 0)) return { error: t.needPrices };
+  const supabase = await createClient();
+  const { error } = await supabase.from("products").insert(clean);
+  return error ? fail(t, error) : done(t.productsAdded(f.num(clean.length)));
 }
 
 // ---------- company SRs ----------

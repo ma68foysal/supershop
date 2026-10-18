@@ -1538,3 +1538,95 @@ details.sale > summary::-webkit-details-marker {
   color: var(--khata-deep);
   font-weight: 600;
 }
+
+/* ---------- add products from a shelf video ---------- */
+.scan-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1.5px dashed var(--khata);
+  border-radius: 10px;
+  background: #fdf3f3;
+  color: var(--khata);
+  text-align: left;
+}
+.scan-button b {
+  display: block;
+  font-size: 16px;
+  color: var(--ink);
+}
+.scan-button small {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.scan-tips {
+  margin: 10px 0 4px 18px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.file-button {
+  display: block;
+  text-align: center;
+  cursor: pointer;
+}
+.scan-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 4px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.scan-list {
+  margin-top: 10px;
+}
+.scan-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--rule);
+}
+.scan-row.off {
+  opacity: 0.55;
+}
+.scan-row > input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  margin-top: 10px;
+  accent-color: var(--leaf);
+  flex: none;
+}
+.scan-fields {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.scan-fields .input {
+  padding: 8px 10px;
+}
+.scan-fields .input.small {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.scan-line {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.scan-line select {
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-btn);
+  background: var(--sheet);
+}
+.scan-fields .input.price.missing {
+  border-color: var(--khata);
+  background: #fdf3f3;
+}

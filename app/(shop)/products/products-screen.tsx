@@ -10,6 +10,7 @@ import { useToast } from "@/components/toast";
 import { telHref } from "@/lib/format";
 import { fuzzyFilter } from "@/lib/search";
 import { UNITS, type Product, type Sr } from "@/lib/types";
+import ScanProducts from "./scan-products";
 
 const isLow = (p: Product) => p.low_stock_at !== null && Number(p.stock_qty) <= Number(p.low_stock_at);
 
@@ -24,6 +25,7 @@ export default function ProductsScreen({
   const [q, setQ] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
   const [editing, setEditing] = useState<Product | "new" | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   const categories = useMemo(
     () => [...new Set(products.map((p) => p.category).filter(Boolean) as string[])].sort(),
@@ -51,6 +53,18 @@ export default function ProductsScreen({
           {t.addProduct}
         </button>
       </div>
+      <button className="scan-button" onClick={() => setScanning(true)}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+          <rect x="7" y="8" width="10" height="8" rx="1.5" />
+          <path d="M10 12l2-1.5v3z" fill="currentColor" />
+        </svg>
+        <span>
+          <b>{t.scanTitle}</b>
+          <small>{t.scanHint}</small>
+        </span>
+      </button>
+      {scanning && <ScanProducts existing={products} onClose={() => setScanning(false)} />}
       <p className="sub" style={{ margin: "12px 0 6px" }}>
         {t.productsCount(f.num(products.length))}
         {low > 0 && (

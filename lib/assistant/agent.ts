@@ -168,10 +168,32 @@ const TOOLS: FunctionDeclaration[] = [
     parametersJsonSchema: obj({}),
   },
   {
+    name: "day_sales",
+    description:
+      "All sales of one day (date like 2026-10-05; default today): receipt number, time, items, total, voided or not. Use it to look at past days in the reports.",
+    parametersJsonSchema: obj({ date: { type: "string" } }),
+  },
+  {
     name: "propose_void_sale",
     description:
-      "Prepare voiding (cancelling) one of today's sales by its receipt number, e.g. a mistake. Shown to the user to confirm.",
-    parametersJsonSchema: obj({ receipt_no: { type: "integer" } }, ["receipt_no"]),
+      "Prepare voiding (cancelling) one sale by its receipt number on a day (default today). A voided sale stays in the list crossed out and is not counted. Shown to the user to confirm.",
+    parametersJsonSchema: obj({ receipt_no: { type: "integer" }, date: { type: "string" } }, ["receipt_no"]),
+  },
+  {
+    name: "propose_delete_sales",
+    description:
+      "Prepare deleting sales for good from one day (date like 2026-10-05; default today): give receipt_numbers, or all=true for every sale of that day. The day itself stays in the reports. Shown to the user as one card to confirm.",
+    parametersJsonSchema: obj({
+      date: { type: "string" },
+      receipt_numbers: { type: "array", items: { type: "integer" } },
+      all: { type: "boolean" },
+    }),
+  },
+  {
+    name: "propose_delete_days",
+    description:
+      "Prepare deleting whole days from the reports, with all their sales (dates like 2026-10-05). Use for 'delete these reports / old days'. Shown to the user as one card to confirm.",
+    parametersJsonSchema: obj({ dates: { type: "array", items: { type: "string" } } }, ["dates"]),
   },
 ];
 
@@ -210,6 +232,21 @@ async function openDay(ctx: Ctx) {
 async function dayTotal(ctx: Ctx, dayId: string) {
   const { data } = await ctx.supabase.from("day_totals").select("total,sales_count").eq("business_day_id", dayId).single();
   return { total: Number(data?.total ?? 0), count: Number(data?.sales_count ?? 0) };
+}
+
+/** The day(s) the shop was open on a date (YYYY-MM-DD); no date means the open day, else today. */
+async function daysOn(ctx: Ctx, date: unknown) {
+  const d = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+  if (!d) {
+    const open = await openDay(ctx);
+    if (open) return [open];
+  }
+  const { data } = await ctx.supabase
+    .from("business_days")
+    .select("id,day_date,opened_at")
+    .eq("day_date", d ?? todayIn(ctx.settings.timezone))
+    .order("opened_at");
+  return (data ?? []) as { id: string; day_date: string; opened_at: string }[];
 }
 
 type SaleRow = {
@@ -455,11 +492,28 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: Ctx) => Prom
     return { status: "Shown to the user as a card. Nothing is saved until they tap confirm." };
   },
 
-  async propose_void_sale({ receipt_no }, ctx) {
-    const day = await openDay(ctx);
-    if (!day) return { error: "The shop is not open; only today's sales can be voided here" };
-    const sale = (await daySales(ctx, day.id)).find((s) => s.receipt_no === Number(receipt_no));
-    if (!sale) return { error: `No sale #${receipt_no} today. Use recent_sales to find it.` };
+  async day_sales({ date }, ctx) {
+    const days = await daysOn(ctx, date);
+    if (!days.length) return { error: `The shop was not open on ${String(date ?? "today")}` };
+    const sales = (await Promise.all(days.map((d) => daySales(ctx, d.id)))).flat();
+    return {
+      date: days[0].day_date,
+      sales: sales.map((s) => ({
+        receipt_no: s.receipt_no,
+        time: timeOf(s.created_at, ctx.settings.timezone),
+        total: Number(s.total),
+        items: saleSummary(s),
+        voided: Boolean(s.voided_at),
+      })),
+    };
+  },
+
+  async propose_void_sale({ receipt_no, date }, ctx) {
+    const days = await daysOn(ctx, date);
+    if (!days.length) return { error: `The shop was not open on ${String(date ?? "today")}` };
+    const sales = (await Promise.all(days.map((d) => daySales(ctx, d.id)))).flat();
+    const sale = sales.find((s) => s.receipt_no === Number(receipt_no));
+    if (!sale) return { error: `No sale #${receipt_no} on ${days[0].day_date}. Use day_sales to find it.` };
     if (sale.voided_at) return { error: `Sale #${receipt_no} is already voided` };
     ctx.proposals.push({
       kind: "void_sale",
@@ -467,8 +521,43 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: Ctx) => Prom
       receipt_no: sale.receipt_no,
       total: Number(sale.total),
       summary: saleSummary(sale),
+      day_date: days[0].day_date,
     });
     return { status: "Shown to the user as a card. Nothing is saved until they tap confirm." };
+  },
+
+  async propose_delete_sales({ date, receipt_numbers, all }, ctx) {
+    const days = await daysOn(ctx, date);
+    if (!days.length) return { error: `The shop was not open on ${String(date ?? "today")}` };
+    const sales = (await Promise.all(days.map((d) => daySales(ctx, d.id)))).flat();
+    const wanted = Array.isArray(receipt_numbers) ? receipt_numbers.map(Number) : [];
+    const chosen = all === true ? sales : sales.filter((s) => wanted.includes(s.receipt_no));
+    if (!chosen.length) return { error: all ? "That day has no sales" : "None of those receipt numbers were found that day" };
+    ctx.proposals.push({
+      kind: "delete_sales",
+      day_date: days[0].day_date,
+      sales: chosen.map((s) => ({ sale_id: s.id, receipt_no: s.receipt_no, total: Number(s.total), summary: saleSummary(s) })),
+      total: chosen.filter((s) => !s.voided_at).reduce((a, s) => a + Number(s.total), 0),
+    });
+    return { status: "Shown to the user as one card. Nothing is deleted until they tap confirm.", count: chosen.length };
+  },
+
+  async propose_delete_days({ dates }, ctx) {
+    const list = (Array.isArray(dates) ? dates : []).map(String).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    if (!list.length) return { error: "Give the dates to delete, like 2026-10-05" };
+    const { data } = await ctx.supabase.from("business_days").select("id,day_date").in("day_date", list);
+    const found = (data ?? []) as { id: string; day_date: string }[];
+    if (!found.length) return { error: "No report found for those dates" };
+    const days = await Promise.all(
+      found.map(async (d) => ({ day_id: d.id, day_date: d.day_date, ...(await dayTotal(ctx, d.id)) })),
+    );
+    days.sort((a, b) => a.day_date.localeCompare(b.day_date));
+    ctx.proposals.push({
+      kind: "delete_days",
+      days: days.map((d) => ({ day_id: d.day_id, day_date: d.day_date, total: d.total, sales: d.count })),
+      total: days.reduce((a, d) => a + d.total, 0),
+    });
+    return { status: "Shown to the user as one card. Nothing is deleted until they tap confirm.", days: days.length };
   },
 };
 
@@ -494,7 +583,19 @@ async function systemPrompt(ctx: Ctx) {
   const date = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: tz });
   const language = ctx.lang === "bn" ? "Bangla (use Bangla digits)" : "English";
 
-  const [today, all] = await Promise.all([handlers.today_summary({}, ctx), products(ctx)]);
+  const [today, all, recentDays] = await Promise.all([
+    handlers.today_summary({}, ctx),
+    products(ctx),
+    ctx.supabase.from("business_days").select("id,day_date,status").order("day_date", { ascending: false }).limit(21),
+  ]);
+  const recentRows = (recentDays.data ?? []) as { id: string; day_date: string; status: string }[];
+  const recentTotals = await Promise.all(recentRows.map((d) => dayTotal(ctx, d.id)));
+  const recent = recentRows
+    .map((d, i) => {
+      const weekday = new Date(d.day_date + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
+      return `${d.day_date} | ${weekday} | ${d.status} | ${recentTotals[i].total} | ${recentTotals[i].count}`;
+    })
+    .join("\n");
   const active = all.filter((p) => p.active);
   const catalog = active
     .slice(0, 400)
@@ -517,10 +618,13 @@ How to work:
 - If any item in a request is unclear or not found, ask about it first and prepare the whole sale together once it is clear.
 - Quantities: আধা কেজি = 0.5 kg, দেড় কেজি = 1.5 kg, এক পোয়া = 0.25 kg, ২৫০ গ্রাম = 0.25 kg, এক হালি = 4 pieces (or 1 if the product's unit is hali), এক ডজন = 12 pieces (or 1 if the unit is dozen). Convert to the product's own unit.
 - "১০ টাকার চিনি" means selling by money: use amount_taka, not qty. "১০০ টাকার বিক্রি" with no product means a total-only sale (propose_quick_sale).
+- Past days are in the reports: use day_sales to look at one. To remove mistakes, propose_void_sale (keeps it crossed out) or propose_delete_sales (gone for good, one card for one or many sales). To remove whole days from the reports, propose_delete_days with all the dates in one card. When the person says "delete all of them", prepare one card covering everything they mean, using the dates listed below; don't ask for receipt numbers one by one. Ask once only if it's unclear whether they mean the sales or the whole days.
 - For a voice message, start your reply with what you heard in quotes on its own line, then answer.
 - If a tool returns an error, explain it simply.
 
 Today right now: ${JSON.stringify(today)}
+Recent days in the reports (date | weekday | open or closed | total | number of sales):
+${recent || "(none yet)"}
 Running low: ${low.length ? low.join(", ") : "nothing"}
 
 Products (product_id | English name | Bangla name | unit | price per unit | stock | short code):

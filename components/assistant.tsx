@@ -365,7 +365,36 @@ function ProposalCard({
       break;
     case "void_sale":
       title = t.aiVoid(f.digits(p.receipt_no));
-      body = row(p.summary, f.money(p.total));
+      body = (
+        <>
+          <p className="sub">{f.date(p.day_date)}</p>
+          {row(p.summary, f.money(p.total))}
+        </>
+      );
+      break;
+    case "delete_sales":
+      title = t.aiDeleteSales(f.date(p.day_date), f.num(p.sales.length));
+      body = (
+        <>
+          {p.sales.map((s) => (
+            <div key={s.sale_id}>{row(`#${f.digits(s.receipt_no)} ${s.summary}`, f.money(s.total))}</div>
+          ))}
+          <p className="sub danger-note">{t.aiForGood}</p>
+        </>
+      );
+      total = p.total;
+      break;
+    case "delete_days":
+      title = t.aiDeleteDays(f.num(p.days.length));
+      body = (
+        <>
+          {p.days.map((d) => (
+            <div key={d.day_id}>{row(`${f.date(d.day_date)}, ${t.salesCount(f.num(d.sales))}`, f.money(d.total))}</div>
+          ))}
+          <p className="sub danger-note">{t.aiForGood}</p>
+        </>
+      );
+      total = p.total;
       break;
   }
 

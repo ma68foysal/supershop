@@ -393,6 +393,11 @@ const en = {
   makeOwner: "Give full access",
   makeStaff: "Make staff again",
   roleChanged: (name: string) => `${name}'s access was changed`,
+  aiDeleteSales: (date: string, n: string) => `Delete ${n} sales from ${date}`,
+  aiDeleteDays: (n: string) => `Delete ${n} days from the reports`,
+  aiForGood: "These are deleted for good and can't be brought back.",
+  salesDeleted: (n: string) => `${n} sales deleted`,
+  daysDeleted: (n: string) => `${n} days deleted from the reports`,
   aiMicDenied: "Allow the microphone in your browser to speak to the assistant.",
 };
 
@@ -770,6 +775,11 @@ const bn: Dict = {
   makeOwner: "পুরো অনুমতি দিন",
   makeStaff: "আবার কর্মী করুন",
   roleChanged: (name) => `${name}-এর অনুমতি বদলানো হয়েছে`,
+  aiDeleteSales: (date, n) => `${date}-এর ${n}টি বিক্রি মুছে ফেলা`,
+  aiDeleteDays: (n) => `রিপোর্ট থেকে ${n}টি দিন মুছে ফেলা`,
+  aiForGood: "এগুলো চিরতরে মুছে যাবে, আর ফেরত আনা যাবে না।",
+  salesDeleted: (n) => `${n}টি বিক্রি মুছে ফেলা হয়েছে`,
+  daysDeleted: (n) => `রিপোর্ট থেকে ${n}টি দিন মুছে ফেলা হয়েছে`,
   aiMicDenied: "কথা বলতে ব্রাউজারে মাইক্রোফোনের অনুমতি দিন।",
 };
 

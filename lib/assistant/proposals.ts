@@ -53,6 +53,10 @@ export type Proposal =
   | { kind: "new_sr"; sr: { name: string; company: string | null; phone: string; note: string | null } }
   | { kind: "open_shop" }
   | { kind: "close_shop"; total: number; count: number }
-  | { kind: "void_sale"; sale_id: string; receipt_no: number; total: number; summary: string };
+  | { kind: "void_sale"; sale_id: string; receipt_no: number; total: number; summary: string; day_date: string }
+  | { kind: "delete_sales"; day_date: string; sales: SaleBrief[]; total: number }
+  | { kind: "delete_days"; days: { day_id: string; day_date: string; total: number; sales: number }[]; total: number };
+
+export type SaleBrief = { sale_id: string; receipt_no: number; total: number; summary: string };
 
 export type ChatTurn = { role: "user" | "model"; text: string };

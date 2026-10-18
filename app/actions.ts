@@ -339,5 +339,19 @@ export async function runProposal(p: Proposal): Promise<ActionResult> {
       const { error } = await supabase.rpc("void_sale", { p_sale: p.sale_id, p_reason: "" });
       return error ? fail(t, error) : done(t.saleVoided);
     }
+    case "delete_sales": {
+      for (const s of p.sales) {
+        const { error } = await supabase.rpc("delete_sale", { p_sale: s.sale_id });
+        if (error && !/not found/i.test(error.message)) return fail(t, error);
+      }
+      return done(t.salesDeleted(f.num(p.sales.length)));
+    }
+    case "delete_days": {
+      for (const d of p.days) {
+        const { error } = await supabase.rpc("delete_day", { p_day: d.day_id });
+        if (error && !/not found/i.test(error.message)) return fail(t, error);
+      }
+      return done(t.daysDeleted(f.num(p.days.length)));
+    }
   }
 }

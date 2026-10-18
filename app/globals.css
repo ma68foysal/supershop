@@ -1532,3 +1532,9 @@ details.sale > summary::-webkit-details-marker {
   align-items: flex-end;
   gap: 6px;
 }
+
+.ai-card .danger-note {
+  margin-top: 6px;
+  color: var(--khata-deep);
+  font-weight: 600;
+}

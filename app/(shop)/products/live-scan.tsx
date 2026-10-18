@@ -156,7 +156,7 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
 
       const added: string[] = [];
       for (const p of data.products as ScannedProduct[]) {
-        const key = normalize(p.name).replace(/s+/g, ""); // "200ml" and "200 ml" are the same
+        const key = normalize(p.name).replace(/\s+/g, ""); // "200ml" and "200 ml" are the same
         const seen = foundRef.current.get(key);
         if (!seen) {
           const thumb = p.frame !== null && images[p.frame] ? await cropThumb(images[p.frame], p.box).catch(() => null) : null;

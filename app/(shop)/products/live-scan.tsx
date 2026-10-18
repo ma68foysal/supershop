@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ScannedProduct } from "@/lib/assistant/scan";
 import { useReportBusy } from "@/components/busy";
 import { useI18n } from "@/components/i18n";
@@ -190,7 +191,8 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
             ? t.liveLookingTalk
             : t.liveLooking;
 
-  return (
+  // Drawn on the page itself: inside the sliding sheet "full screen" would only fill the sheet
+  return createPortal(
     <div className="live" role="dialog" aria-modal="true" aria-label={t.liveScan}>
       <video ref={videoRef} className="live-video" playsInline muted />
       <div className={"live-frame" + (status === "sending" ? " sending" : "")} aria-hidden="true" />
@@ -235,6 +237,7 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

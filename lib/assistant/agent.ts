@@ -5,7 +5,7 @@ import { getMonthReport, isMonth, todayIn } from "../month";
 import { fuzzyFilter } from "../search";
 import type { createClient } from "../supabase/server";
 import { UNITS, type Product, type Settings, type Sr, type Staff, type Unit } from "../types";
-import { allOutForToday, isDailyLimit, readyModels, rest, retryable, retryAfterMs, sleep } from "./gemini";
+import { allOutForToday, clientFor, hasKey, isDailyLimit, readyTargets, rest, retryable, retryAfterMs, sleep } from "./gemini";
 import type { ChatTurn, ProductFields, Proposal, SaleLine } from "./proposals";
 
 const MAX_STEPS = 6;
@@ -686,22 +686,20 @@ async function runTurn(ai: GoogleGenAI, model: string, history: ChatTurn[], audi
 }
 
 export async function runAssistant(history: ChatTurn[], base: Omit<Ctx, "proposals">, audio?: Audio) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new AssistantError("config");
-  // A slow model is skipped for the next one rather than keeping the shop waiting
-  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 20_000 } });
+  if (!hasKey()) throw new AssistantError("config");
   const ctx: Ctx = { ...base, proposals: [] };
   const system = await systemPrompt(ctx);
 
-  // Any failure on a model (out of quota, busy, slow) restarts the whole turn on the next one
+  // Any failure on a model (out of quota, busy, slow) restarts the whole turn on the next one,
+  // then on the backup keys. A slow model gets 20 s rather than keeping the shop waiting.
   let lastError: unknown;
-  for (const model of readyModels()) {
+  for (const target of readyTargets()) {
     try {
-      return await runTurn(ai, model, history, audio, ctx, system);
+      return await runTurn(clientFor(target.key, 20_000), target.model, history, audio, ctx, system);
     } catch (e) {
       lastError = e;
       if (!retryable(e)) throw new AssistantError("failed");
-      rest(model, e);
+      rest(target, e);
     }
   }
   throw new AssistantError(isDailyLimit(lastError) && allOutForToday() ? "quota" : "busy");

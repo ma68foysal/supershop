@@ -25,6 +25,9 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...        # server only, used to create staff logins
 GEMINI_API_KEY=...                       # server only, for the in-app assistant (free key from aistudio.google.com)
 ```
+Optional: `GEMINI_BACKUP_API_KEYS=key2,key3` — keys from other Google accounts, used only when every
+model on the main key is busy or out for the day. Google's terms limit using extra accounts to get past
+free-tier limits, so these accounts may be suspended if Google notices; use them as an emergency backup.
 Optional: `GEMINI_MODELS=gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3.8-flash` changes which
 Gemini models the assistant tries, in order. Without `GEMINI_API_KEY` the app works; only the assistant
 says it isn't set up.

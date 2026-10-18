@@ -1,7 +1,7 @@
 import "server-only";
-import { GoogleGenAI, type Part } from "@google/genai";
+import type { Part } from "@google/genai";
 import { UNITS } from "../types";
-import { allOutForToday, isDailyLimit, readyModels, rest, retryable } from "./gemini";
+import { allOutForToday, clientFor, hasKey, isDailyLimit, readyTargets, rest, retryable } from "./gemini";
 
 export type ScannedProduct = {
   name: string;
@@ -100,14 +100,12 @@ function sellingUnit(name: string, unit: string): ScannedProduct["unit"] {
 
 /** One JSON request, trying the next model when one is busy or out of free quota. */
 async function generateJson<T>(parts: Part[], schema: object): Promise<T | ScanError> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { error: "config" };
-  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 50_000 } });
+  if (!hasKey()) return { error: "config" };
   let lastError: unknown;
-  for (const model of readyModels()) {
+  for (const target of readyTargets()) {
     try {
-      const res = await ai.models.generateContent({
-        model,
+      const res = await clientFor(target.key, 50_000).models.generateContent({
+        model: target.model,
         contents: [{ role: "user", parts }],
         config: { responseMimeType: "application/json", responseJsonSchema: schema },
       });
@@ -116,7 +114,7 @@ async function generateJson<T>(parts: Part[], schema: object): Promise<T | ScanE
       lastError = e;
       if (e instanceof SyntaxError) continue; // unreadable reply: try the next model
       if (!retryable(e)) return { error: "failed" };
-      rest(model, e);
+      rest(target, e);
     }
   }
   return { error: isDailyLimit(lastError) && allOutForToday() ? "quota" : "busy" };

@@ -38,7 +38,7 @@ export async function startRecording() {
   };
 }
 
-function merge(chunks: Float32Array[]) {
+export function merge(chunks: Float32Array[]) {
   const out = new Float32Array(chunks.reduce((n, c) => n + c.length, 0));
   let offset = 0;
   for (const c of chunks) {
@@ -49,7 +49,7 @@ function merge(chunks: Float32Array[]) {
 }
 
 /** Average each block of samples down to the target rate. */
-function downsample(input: Float32Array, from: number, to: number) {
+export function downsample(input: Float32Array, from: number, to: number) {
   if (from <= to) return input;
   const ratio = from / to;
   const out = new Float32Array(Math.floor(input.length / ratio));

@@ -13,6 +13,7 @@ const MAX_BYTES = 3_500_000; // keeps the request under the hosting limit
  * Two steps of the shelf scan:
  *  { audio, offset }            → what was said while filming, with times
  *  { images, times?, notes? }   → the products in those pictures
+ *  { images: [one], clip }      → live scan: one camera picture plus the sound recorded with it
  */
 export async function POST(request: Request) {
   const t = DICTS[await getLang()];
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: t.aiSignIn }, { status: 401 });
 
-  let body: { audio?: unknown; offset?: unknown; images?: unknown; times?: unknown; notes?: unknown };
+  let body: { audio?: unknown; offset?: unknown; images?: unknown; times?: unknown; notes?: unknown; clip?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -43,7 +44,8 @@ export async function POST(request: Request) {
       .filter((n): n is SpokenNote => typeof n?.text === "string" && typeof n?.at === "number")
       .slice(0, 300)
       .map((n) => ({ at: n.at, text: n.text.slice(0, 300) }));
-    result = await scanImages(images, times, notes);
+    const clip = typeof body.clip === "string" && body.clip.length < 600_000 ? body.clip : undefined;
+    result = await scanImages(images, times, notes, clip);
   }
 
   if (!("error" in result)) return Response.json(result);

@@ -57,7 +57,8 @@ List every distinct product you can identify from its packaging.
 - name: English, brand + product + size (e.g. "Pran Chanachur 150g", "Rupchanda Soybean Oil 1L").
 - name_bn: the Bangla name as shop staff would say it (e.g. "প্রাণ চানাচুর ১৫০ গ্রাম").
 - unit: how the shop SELLS it, not the pack size. Every packed item (a 100g soap, a 1 litre bottle, a 1 kg salt packet) is "pcs". Only loose goods weighed out for customers (rice, dal, sugar, onions from a sack) are "kg"; eggs are "dozen" or "hali".
-- price: if the person filming said a price for this product (see the spoken notes, matched by what they named and by time), use it and set price_source "spoken" — that is the shop's real price and wins over the pack. Otherwise the maximum retail price printed on the pack when clearly readable, price_source "pack". Otherwise null and "none". Never guess a price.
+- price: if the person filming named this product and said its price (in the spoken notes or the recorded sound), use it and set price_source "spoken" — that is the shop's real price and wins over the pack. Otherwise the maximum retail price printed on the pack when clearly readable, price_source "pack". Otherwise null and "none". Never guess a price.
+- Only use a spoken price when the product's name is said together with it ("Pran chanachur, 55 taka"). A price heard without a product name (the start of the sentence may be cut off) belongs to nobody: ignore it.
 - A product that was only spoken about (not visible) can be listed too, with frame and box null.
 - frame and box: the picture where the product is clearest, and its bounding box there as [ymin, xmin, ymax, xmax] scaled 0–1000.
 - confidence: how sure you are about the name and size.
@@ -142,17 +143,24 @@ export async function scanImages(
   images: string[],
   times: (number | null)[] = [],
   notes: SpokenNote[] = [],
+  /** live scan: the sound recorded while this picture was taken (8 kHz WAV, base64) */
+  clip?: string,
 ): Promise<{ products: ScannedProduct[] } | ScanError> {
   const parts: Part[] = [];
   images.forEach((data, i) => {
     parts.push({ text: `Picture ${i}${typeof times[i] === "number" ? ` (at ${times[i]} s)` : ""}:` });
     parts.push({ inlineData: { mimeType: "image/jpeg", data } });
   });
-  parts.push({
-    text: notes.length
-      ? `Spoken notes while filming:\n${notes.map((n) => `${n.at} s: ${n.text}`).join("\n")}`
-      : "Nothing was said while filming.",
-  });
+  if (clip) {
+    parts.push({ text: "Sound recorded while this picture was being taken (what the person said about the products):" });
+    parts.push({ inlineData: { mimeType: "audio/wav", data: clip } });
+  } else {
+    parts.push({
+      text: notes.length
+        ? `Spoken notes while filming:\n${notes.map((n) => `${n.at} s: ${n.text}`).join("\n")}`
+        : "Nothing was said while filming.",
+    });
+  }
   parts.push({ text: PRODUCTS_PROMPT });
 
   const r = await generateJson<{ products?: Partial<ScannedProduct & { price_source: string }>[] }>(parts, PRODUCTS_SCHEMA);

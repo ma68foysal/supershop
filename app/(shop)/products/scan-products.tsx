@@ -11,6 +11,7 @@ import { cropThumb, photoFrames, videoAudio, videoFrames, type Frame } from "@/l
 import { toAsciiDigits } from "@/lib/format";
 import { normalize } from "@/lib/search";
 import { UNITS, type Product, type Unit } from "@/lib/types";
+import LiveScan, { type LiveFound } from "./live-scan";
 
 const PER_REQUEST = 12;
 
@@ -46,7 +47,7 @@ function alreadyIn(existing: Product[], p: { name: string; name_bn: string }) {
 export default function ScanProducts({ existing, onClose }: { existing: Product[]; onClose: () => void }) {
   const { t, f } = useI18n();
   const toast = useToast();
-  const [phase, setPhase] = useState<"pick" | "reading" | "review">("pick");
+  const [phase, setPhase] = useState<"pick" | "live" | "reading" | "review">("pick");
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -123,29 +124,34 @@ export default function ScanProducts({ existing, onClose }: { existing: Product[
       const thumbs = await Promise.all(
         products.map((p) => (p.frame !== null && frames[p.frame] ? cropThumb(frames[p.frame].data, p.box).catch(() => null) : null)),
       );
-      setRows(
-        products.map((p, i) => {
-          const exists = alreadyIn(existing, p);
-          return {
-            key: `${i}-${p.name}`,
-            checked: !exists,
-            exists,
-            name: p.name,
-            name_bn: p.name_bn,
-            category: p.category,
-            unit: p.unit,
-            price: p.price === null ? "" : String(p.price),
-            priceSource: p.price_source,
-            unsure: p.confidence === "low",
-            thumb: thumbs[i],
-          };
-        }),
-      );
-      setPhase("review");
+      review(products.map((p, i) => ({ ...p, thumb: thumbs[i] })));
     } catch (e) {
       setError((e as Error).message === "video" ? t.videoFailed : (e as Error).message);
       setPhase("pick");
     }
+  }
+
+  /** Show the found products for checking; ones already in the shop start unticked. */
+  function review(products: (ScannedProduct & { thumb: string | null })[]) {
+    setRows(
+      products.map((p, i) => {
+        const exists = alreadyIn(existing, p);
+        return {
+          key: `${i}-${p.name}`,
+          checked: !exists,
+          exists,
+          name: p.name,
+          name_bn: p.name_bn,
+          category: p.category,
+          unit: p.unit,
+          price: p.price === null ? "" : String(p.price),
+          priceSource: p.price_source,
+          unsure: p.confidence === "low",
+          thumb: p.thumb,
+        };
+      }),
+    );
+    setPhase("review");
   }
 
   const update = (key: string, patch: Partial<Row>) =>
@@ -179,7 +185,11 @@ export default function ScanProducts({ existing, onClose }: { existing: Product[
               <li key={tip}>{tip}</li>
             ))}
           </ul>
-          <label className="primary file-button">
+          <button className="primary live-button" onClick={() => setPhase("live")}>
+            <span>{t.liveScan}</span>
+            <small>{t.liveHint}</small>
+          </button>
+          <label className="secondary file-button">
             {t.pickVideo}
             <input type="file" accept="video/*" onChange={(e) => start(e.target.files, "video")} hidden />
           </label>
@@ -189,6 +199,13 @@ export default function ScanProducts({ existing, onClose }: { existing: Product[
           </label>
           {error && <p className="error">{error}</p>}
         </>
+      )}
+
+      {phase === "live" && (
+        <LiveScan
+          onClose={() => setPhase("pick")}
+          onDone={(found: LiveFound[]) => (found.length ? review(found) : setPhase("pick"))}
+        />
       )}
 
       {phase === "reading" && (

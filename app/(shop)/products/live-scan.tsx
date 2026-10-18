@@ -12,11 +12,14 @@ import { downsample, encodeWav, merge, toBase64 } from "@/lib/wav-recorder";
 /** A product found live, with the picture it was found in. */
 export type LiveFound = ScannedProduct & { thumb: string | null };
 
+/** One line of the running transcript: what was said, and the price taken from it. */
+type Heard = { id: number; text: string | null; result: string | null; ok: boolean };
+
 const EVERY_MS = 4000; // a picture at least this often, even when nobody speaks
 const LONG_SIDE = 768;
 const VOICE = 0.02; // loudness that counts as someone speaking
 const PAUSE_MS = 700; // this long quiet after speaking = they finished saying the price: send now
-const AUDIO_RATE = 8000;
+const AUDIO_RATE = 16000; // clearer speech than 8 kHz, still small
 
 /**
  * Full-screen camera: every few seconds a picture and the sound since the last one go to the
@@ -43,6 +46,7 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
   const [status, setStatus] = useState<"starting" | "looking" | "sending" | "paused" | "slow">("starting");
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [heard, setHeard] = useState<Heard[]>([]);
   const [hasMic, setHasMic] = useState(false);
   useReportBusy(status === "sending");
 
@@ -127,13 +131,19 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
       let clip: string | undefined;
       const audio = audioRef.current;
       if (audio && audio.chunks.length) {
-        const fresh = downsample(merge(audio.chunks.splice(0)), audio.rate, AUDIO_RATE).slice(-AUDIO_RATE * 10);
+        const fresh = downsample(merge(audio.chunks.splice(0)), audio.rate, AUDIO_RATE).slice(-AUDIO_RATE * 8);
         const pcm = merge([tailRef.current, fresh]);
-        tailRef.current = fresh.slice(-AUDIO_RATE * 5);
+        tailRef.current = fresh.slice(-AUDIO_RATE * 4);
         let peak = 0;
         for (let i = 0; i < pcm.length; i += 8) peak = Math.max(peak, Math.abs(pcm[i]));
         if (peak > 0.02) clip = toBase64(encodeWav(pcm, AUDIO_RATE)); // only when someone spoke
       }
+
+      // The transcript line shows up straight away, filled in when the answer comes
+      const lineId = Date.now();
+      if (clip) setHeard((all) => [...all.slice(-4), { id: lineId, text: null, result: null, ok: false }]);
+      const fill = (patch: Partial<Heard>) =>
+        setHeard((all) => all.map((h) => (h.id === lineId ? { ...h, ...patch } : h)));
 
       const res = await fetch("/api/products/scan", {
         method: "POST",
@@ -143,6 +153,7 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
       const images = prevFrameRef.current ? [prevFrameRef.current, frame] : [frame];
       prevFrameRef.current = frame;
       const data = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
+      if (!res.ok || !data) fill({ text: "", result: t.liveSlow });
       if (res.status === 429) {
         setError(data?.error ?? t.aiQuota);
         pausedRef.current = true;
@@ -168,20 +179,31 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
           added.push(`${seen.name_bn || seen.name} ${f.money(p.price)}`);
         }
       }
-      // What it heard, so you can tell the microphone works and it understood the price
-      const heard = typeof data.heard === "string" && data.heard ? `🎤 ${data.heard}` : "";
-      if (added.length || heard) {
+      // What it heard, and which price it took from that, so you can check it understood
+      if (clip) {
+        const said = typeof data.heard === "string" ? data.heard : "";
+        const priced = (data.products as ScannedProduct[])
+          .filter((p) => p.price !== null && p.price_source === "spoken")
+          .map((p) => `${p.name_bn || p.name} ${f.money(p.price!)}`);
+        fill({
+          text: said,
+          result: priced.length ? "✓ " + priced.join(", ") : said ? t.liveNoPrice : t.liveHeardNothing,
+          ok: priced.length > 0,
+        });
+      }
+      if (added.length) {
         setFound([...foundRef.current.values()]);
-        setFlash([added.length ? "+ " + added.join(", ") : "", heard].filter(Boolean).join("\n"));
-        setTimeout(() => setFlash(null), 3500);
+        setFlash("+ " + added.join(", "));
+        setTimeout(() => setFlash(null), 3000);
       }
       setStatus(pausedRef.current ? "paused" : "looking");
     } catch {
       setStatus("slow");
+      setHeard((all) => all.map((h) => (h.text === null ? { ...h, text: "", result: t.liveSlow } : h)));
     } finally {
       busyRef.current = false;
     }
-  }, [f, t.aiQuota]);
+  }, [f, t]);
 
   // Send right after the person stops talking, otherwise every few seconds
   useEffect(() => {
@@ -251,6 +273,16 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
       {error && <div className="live-error">{error}</div>}
 
       <div className="live-bottom">
+        {heard.length > 0 && (
+          <ul className="live-feed" aria-live="polite">
+            {heard.map((h) => (
+              <li key={h.id} className={h.ok ? "ok" : ""}>
+                <span>🎤 {h.text === null ? t.liveHeardWait : h.text || "…"}</span>
+                {h.result && <small>{h.result}</small>}
+              </li>
+            ))}
+          </ul>
+        )}
         {found.length > 0 && (
           <ul className="live-list">
             {[...found].reverse().map((p) => (

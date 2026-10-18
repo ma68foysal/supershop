@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       .filter((n): n is SpokenNote => typeof n?.text === "string" && typeof n?.at === "number")
       .slice(0, 300)
       .map((n) => ({ at: n.at, text: n.text.slice(0, 300) }));
-    const clip = typeof body.clip === "string" && body.clip.length < 600_000 ? body.clip : undefined;
+    const clip = typeof body.clip === "string" && body.clip.length < 800_000 ? body.clip : undefined;
     result = await scanImages(images, times, notes, clip, body.live === true);
   }
 

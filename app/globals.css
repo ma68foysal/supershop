@@ -1841,3 +1841,40 @@ details.sale > summary::-webkit-details-marker {
 .live-meter i:nth-child(3) {
   height: calc(4px + var(--level) * 6px);
 }
+
+/* running transcript, newest at the bottom like live comments */
+.live-feed {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.live-feed li {
+  max-width: 92%;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 15px;
+  line-height: 1.35;
+  display: grid;
+  gap: 2px;
+  animation: pop 0.2s;
+}
+.live-feed li:nth-last-child(n + 4) {
+  opacity: 0.55;
+}
+.live-feed small {
+  font-size: 13px;
+  color: #f5c97a;
+}
+.live-feed li.ok small {
+  color: #7fe39a;
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-feed li {
+    animation: none;
+  }
+}

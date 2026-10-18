@@ -12,8 +12,10 @@ import { downsample, encodeWav, merge, toBase64 } from "@/lib/wav-recorder";
 /** A product found live, with the picture it was found in. */
 export type LiveFound = ScannedProduct & { thumb: string | null };
 
-const EVERY_MS = 5000; // one picture + what was said, every 5 seconds
-const LONG_SIDE = 900;
+const EVERY_MS = 4000; // a picture at least this often, even when nobody speaks
+const LONG_SIDE = 768;
+const VOICE = 0.02; // loudness that counts as someone speaking
+const PAUSE_MS = 700; // this long quiet after speaking = they finished saying the price: send now
 const AUDIO_RATE = 8000;
 
 /**
@@ -27,7 +29,13 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
   const audioRef = useRef<{ ctx: AudioContext; chunks: Float32Array[]; rate: number } | null>(null);
   // The end of the last piece of sound, sent again with the next one so no sentence is cut in half
   const tailRef = useRef<Float32Array>(new Float32Array(0));
+  // The picture before this one: the product may be put down by the time its price is said
+  const prevFrameRef = useRef<string | null>(null);
   const busyRef = useRef(false);
+  const lastSentRef = useRef(0);
+  // when the person last spoke, and whether that talk has been sent yet
+  const voiceRef = useRef({ at: 0, unsent: false });
+  const meterRef = useRef<HTMLSpanElement>(null);
   const pausedRef = useRef(false);
   const foundRef = useRef(new Map<string, LiveFound>());
 
@@ -71,11 +79,21 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
         const AudioCtx =
           window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         const ctx = new AudioCtx();
+        // phones may start the sound suspended; it records nothing until resumed
+        await ctx.resume().catch(() => {});
         const source = ctx.createMediaStreamSource(stream);
         const node = ctx.createScriptProcessor(4096, 1, 1);
         const state = { ctx, chunks: [] as Float32Array[], rate: ctx.sampleRate };
         node.onaudioprocess = (e) => {
-          if (!pausedRef.current) state.chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+          const data = e.inputBuffer.getChannelData(0);
+          let sum = 0;
+          for (let i = 0; i < data.length; i += 4) sum += data[i] * data[i];
+          const level = Math.sqrt(sum / (data.length / 4));
+          // the microphone bar moves with your voice, so you can see it is listening
+          meterRef.current?.style.setProperty("--level", String(Math.min(1, level * 12)));
+          if (pausedRef.current) return;
+          state.chunks.push(new Float32Array(data));
+          if (level > VOICE) voiceRef.current = { at: Date.now(), unsent: true };
         };
         source.connect(node);
         node.connect(ctx.destination);
@@ -95,6 +113,8 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
     const video = videoRef.current;
     if (busyRef.current || pausedRef.current || !video || !video.videoWidth) return;
     busyRef.current = true;
+    lastSentRef.current = Date.now();
+    voiceRef.current.unsent = false;
     setStatus("sending");
     try {
       const scale = Math.min(1, LONG_SIDE / Math.max(video.videoWidth, video.videoHeight));
@@ -112,14 +132,16 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
         tailRef.current = fresh.slice(-AUDIO_RATE * 5);
         let peak = 0;
         for (let i = 0; i < pcm.length; i += 8) peak = Math.max(peak, Math.abs(pcm[i]));
-        if (peak > 0.05) clip = toBase64(encodeWav(pcm, AUDIO_RATE)); // only when someone spoke
+        if (peak > 0.02) clip = toBase64(encodeWav(pcm, AUDIO_RATE)); // only when someone spoke
       }
 
       const res = await fetch("/api/products/scan", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ images: [frame], clip }),
+        body: JSON.stringify({ images: prevFrameRef.current ? [prevFrameRef.current, frame] : [frame], clip, live: true }),
       });
+      const images = prevFrameRef.current ? [prevFrameRef.current, frame] : [frame];
+      prevFrameRef.current = frame;
       const data = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
       if (res.status === 429) {
         setError(data?.error ?? t.aiQuota);
@@ -134,10 +156,10 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
 
       const added: string[] = [];
       for (const p of data.products as ScannedProduct[]) {
-        const key = normalize(p.name);
+        const key = normalize(p.name).replace(/s+/g, ""); // "200ml" and "200 ml" are the same
         const seen = foundRef.current.get(key);
         if (!seen) {
-          const thumb = p.frame !== null ? await cropThumb(frame, p.box).catch(() => null) : null;
+          const thumb = p.frame !== null && images[p.frame] ? await cropThumb(images[p.frame], p.box).catch(() => null) : null;
           foundRef.current.set(key, { ...p, thumb });
           added.push(`${p.name_bn || p.name}${p.price ? ` ${f.money(p.price)}` : ""}`);
         } else if (p.price !== null && (seen.price === null || (p.price_source === "spoken" && seen.price_source !== "spoken"))) {
@@ -146,10 +168,12 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
           added.push(`${seen.name_bn || seen.name} ${f.money(p.price)}`);
         }
       }
-      if (added.length) {
+      // What it heard, so you can tell the microphone works and it understood the price
+      const heard = typeof data.heard === "string" && data.heard ? `🎤 ${data.heard}` : "";
+      if (added.length || heard) {
         setFound([...foundRef.current.values()]);
-        setFlash("+ " + added.join(", "));
-        setTimeout(() => setFlash(null), 2500);
+        setFlash([added.length ? "+ " + added.join(", ") : "", heard].filter(Boolean).join("\n"));
+        setTimeout(() => setFlash(null), 3500);
       }
       setStatus(pausedRef.current ? "paused" : "looking");
     } catch {
@@ -159,9 +183,14 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
     }
   }, [f, t.aiQuota]);
 
+  // Send right after the person stops talking, otherwise every few seconds
   useEffect(() => {
     if (status === "starting" || error) return;
-    const id = setInterval(tick, EVERY_MS);
+    const id = setInterval(() => {
+      const now = Date.now();
+      const v = voiceRef.current;
+      if ((v.unsent && now - v.at > PAUSE_MS) || now - lastSentRef.current > EVERY_MS) void tick();
+    }, 200);
     return () => clearInterval(id);
   }, [status === "starting", error, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -185,6 +214,8 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
       ? t.liveStarting
       : status === "paused"
         ? t.livePaused
+        : status === "sending"
+          ? t.liveReading
         : status === "slow"
           ? t.liveSlow
           : hasMic
@@ -202,7 +233,15 @@ export default function LiveScan({ onDone, onClose }: { onDone: (found: LiveFoun
           ×
         </button>
         <div className="live-status" role="status">
-          <span className={"rec-dot" + (status === "paused" ? " off" : "")} aria-hidden="true" />
+          {hasMic && status !== "paused" ? (
+            <span className="live-meter" ref={meterRef} aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          ) : (
+            <span className={"rec-dot" + (status === "paused" ? " off" : "")} aria-hidden="true" />
+          )}
           {label}
         </div>
         <span className="live-count">{t.liveFound(f.num(found.length))}</span>

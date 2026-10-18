@@ -47,8 +47,9 @@ const PRODUCTS_SCHEMA = {
         required: ["name", "name_bn", "category", "unit", "price", "price_source", "confidence", "frame", "box"],
       },
     },
+    heard: { type: "string", description: "Live scan only: what the person said in the sound, word for word; empty if nothing" },
   },
-  required: ["products"],
+  required: ["products", "heard"],
 };
 
 const PRODUCTS_PROMPT = `These pictures are frames from a video (or photos) of the shelves of a small grocery shop in Bangladesh. Each picture is labelled with its index and, for video, the second it was taken.
@@ -58,7 +59,7 @@ List every distinct product you can identify from its packaging.
 - name_bn: the Bangla name as shop staff would say it (e.g. "প্রাণ চানাচুর ১৫০ গ্রাম").
 - unit: how the shop SELLS it, not the pack size. Every packed item (a 100g soap, a 1 litre bottle, a 1 kg salt packet) is "pcs". Only loose goods weighed out for customers (rice, dal, sugar, onions from a sack) are "kg"; eggs are "dozen" or "hali".
 - price: if the person filming named this product and said its price (in the spoken notes or the recorded sound), use it and set price_source "spoken" — that is the shop's real price and wins over the pack. Otherwise the maximum retail price printed on the pack when clearly readable, price_source "pack". Otherwise null and "none". Never guess a price.
-- Only use a spoken price when the product's name is said together with it ("Pran chanachur, 55 taka"). A price heard without a product name (the start of the sentence may be cut off) belongs to nobody: ignore it.
+- Only use a spoken price when the product's name is said together with it ("Pran chanachur, 55 taka"). A price heard without a product name (the start of the sentence may be cut off) belongs to nobody: ignore it. Exception, the live scan: there the person shows one product to the camera and says its price ("এটা ১১০ টাকা", "১১০ টাকা"); a price said without a name belongs to the product being shown — held up, closest, or in the middle of the pictures — when that is one clear product.
 - A product that was only spoken about (not visible) can be listed too, with frame and box null.
 - frame and box: the picture where the product is clearest, and its bounding box there as [ymin, xmin, ymax, xmax] scaled 0–1000.
 - confidence: how sure you are about the name and size.
@@ -99,12 +100,12 @@ function sellingUnit(name: string, unit: string): ScannedProduct["unit"] {
 }
 
 /** One JSON request, trying the next model when one is busy or out of free quota. */
-async function generateJson<T>(parts: Part[], schema: object): Promise<T | ScanError> {
+async function generateJson<T>(parts: Part[], schema: object, timeoutMs = 50_000): Promise<T | ScanError> {
   if (!hasKey()) return { error: "config" };
   let lastError: unknown;
   for (const target of readyTargets()) {
     try {
-      const res = await clientFor(target.key, 50_000).models.generateContent({
+      const res = await clientFor(target.key, timeoutMs).models.generateContent({
         model: target.model,
         contents: [{ role: "user", parts }],
         config: { responseMimeType: "application/json", responseJsonSchema: schema },
@@ -143,14 +144,18 @@ export async function scanImages(
   notes: SpokenNote[] = [],
   /** live scan: the sound recorded while this picture was taken (8 kHz WAV, base64) */
   clip?: string,
-): Promise<{ products: ScannedProduct[] } | ScanError> {
+  live = false,
+): Promise<{ products: ScannedProduct[]; heard: string } | ScanError> {
   const parts: Part[] = [];
   images.forEach((data, i) => {
     parts.push({ text: `Picture ${i}${typeof times[i] === "number" ? ` (at ${times[i]} s)` : ""}:` });
     parts.push({ inlineData: { mimeType: "image/jpeg", data } });
   });
   if (clip) {
-    parts.push({ text: "Sound recorded while this picture was being taken (what the person said about the products):" });
+    parts.push({
+      text:
+        "Live scan. The pictures are the camera a few seconds ago and now. Sound recorded over that time (what the person said about the product they are showing):",
+    });
     parts.push({ inlineData: { mimeType: "audio/wav", data: clip } });
   } else {
     parts.push({
@@ -161,7 +166,11 @@ export async function scanImages(
   }
   parts.push({ text: PRODUCTS_PROMPT });
 
-  const r = await generateJson<{ products?: Partial<ScannedProduct & { price_source: string }>[] }>(parts, PRODUCTS_SCHEMA);
+  const r = await generateJson<{ products?: Partial<ScannedProduct & { price_source: string }>[]; heard?: string }>(
+    parts,
+    PRODUCTS_SCHEMA,
+    live ? 12_000 : 50_000, // someone is standing with the camera waiting
+  );
   if (isError(r)) return r;
   const products = (r.products ?? [])
     .filter((p) => p && typeof p.name === "string" && p.name.trim())
@@ -184,5 +193,5 @@ export async function scanImages(
         box: frame === null ? null : box,
       };
     });
-  return { products };
+  return { products, heard: clip && typeof r.heard === "string" ? r.heard.trim().slice(0, 200) : "" };
 }

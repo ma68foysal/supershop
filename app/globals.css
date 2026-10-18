@@ -1742,6 +1742,8 @@ details.sale > summary::-webkit-details-marker {
   background: rgba(47, 122, 74, 0.95);
   font-weight: 600;
   font-size: 15px;
+  white-space: pre-line;
+  text-align: center;
   animation: pop 0.25s;
 }
 .live-error {
@@ -1815,4 +1817,27 @@ details.sale > summary::-webkit-details-marker {
   .live-flash {
     animation: none;
   }
+}
+
+/* microphone level: three bars that grow with the voice */
+.live-meter {
+  --level: 0;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+  flex: none;
+}
+.live-meter i {
+  width: 4px;
+  border-radius: 2px;
+  background: #6fdc8c;
+  height: calc(4px + var(--level) * 14px);
+  transition: height 0.08s;
+}
+.live-meter i:nth-child(2) {
+  height: calc(4px + var(--level) * 10px);
+}
+.live-meter i:nth-child(3) {
+  height: calc(4px + var(--level) * 6px);
 }

@@ -13,6 +13,27 @@ type CardState = { p: Proposal; status: "pending" | "done" | "cancelled"; result
 type Turn = { role: "user" | "model"; text: string; cards?: CardState[]; error?: boolean };
 
 const MAX_SECONDS = 30;
+const SAVED = "dokan-chat";
+const KEEP = 60; // messages kept on the phone
+const SEND = 20; // latest messages the AI reads
+
+/**
+ * The chat is kept on this phone so it is still there after closing or reloading the app.
+ * Cards that were never confirmed come back as cancelled: prices and stock may have changed since.
+ */
+function loadTurns(): Turn[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVED) ?? "[]") as Turn[];
+    if (!Array.isArray(saved)) return [];
+    return saved.map((x) => ({
+      ...x,
+      cards: x.cards?.map((c) => (c.status === "pending" ? { ...c, status: "cancelled" as const } : c)),
+    }));
+  } catch {
+    return [];
+  }
+}
 const noSubscribe = () => () => {};
 const micAvailable = () => Boolean(navigator.mediaDevices?.getUserMedia);
 
@@ -26,7 +47,7 @@ const tidyReply = (text: string, lang: "bn" | "en") => {
 export default function Assistant() {
   const { t, f, lang } = useI18n();
   const [open, setOpen] = useState(false);
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [turns, setTurns] = useState<Turn[]>(loadTurns);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   useReportBusy(thinking);
@@ -44,6 +65,11 @@ export default function Assistant() {
   const turnsRef = useRef(turns);
   useEffect(() => {
     turnsRef.current = turns;
+    try {
+      localStorage.setItem(SAVED, JSON.stringify(turns.slice(-KEEP)));
+    } catch {
+      // storage full or blocked: the chat just isn't kept
+    }
   }, [turns]);
 
   useEffect(() => {
@@ -51,16 +77,17 @@ export default function Assistant() {
   }, [turns, thinking]);
 
   // What the AI sees: the conversation text, plus what happened to each card
-  const history = (all: Turn[]): ChatTurn[] =>
-    all
-      .filter((x) => !x.error)
-      .map((x) => ({
+  const history = (all: Turn[]): ChatTurn[] => {
+    const recent = all.filter((x) => !x.error).slice(-SEND);
+    while (recent.length && recent[0].role !== "user") recent.shift(); // a conversation starts with you
+    return recent.map((x) => ({
         role: x.role,
         text: [
           x.text,
           ...(x.cards ?? []).map((c) => `[card ${c.p.kind}: ${c.status}${c.result ? ` (${c.result})` : ""}]`),
         ].join("\n"),
       }));
+  };
 
   async function send(text: string, audio?: Recording) {
     const msg = text.trim();

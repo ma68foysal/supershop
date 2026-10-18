@@ -34,7 +34,8 @@ export async function POST(request: Request) {
     }
     history = (Array.isArray(body.history) ? body.history : [])
       .filter((m: ChatTurn) => (m.role === "user" || m.role === "model") && typeof m.text === "string")
-      .map((m: ChatTurn) => ({ role: m.role, text: m.text.slice(0, 2000) }));
+      .map((m: ChatTurn) => ({ role: m.role, text: m.text.slice(0, 2000) }))
+      .slice(-30);
   } catch {
     return Response.json({ error: t.genericError }, { status: 400 });
   }
